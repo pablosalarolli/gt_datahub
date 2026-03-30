@@ -20,9 +20,21 @@ set(GTDATAHUB_SRC_FILES
 )
 
 set(GTDATAHUB_HEADER_FILES
+    include/gt_datahub/visibility_control.hpp
+    include/gt_datahub/timestamp.hpp
+    include/gt_datahub/data_type.hpp
+    include/gt_datahub/quality.hpp
+    include/gt_datahub/variable_role.hpp
+    include/gt_datahub/errors.hpp
 )
 
 add_library(gt_datahub INTERFACE ${GTDATAHUB_SRC_FILES} ${GTDATAHUB_HEADER_FILES} )
+
+target_include_directories(gt_datahub
+    INTERFACE
+        $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
+        $<INSTALL_INTERFACE:include>
+)
 
 ##############################################
 # LINK DE DEPENDÊNCIAS EXTERNAS

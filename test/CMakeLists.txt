@@ -10,6 +10,12 @@ find_package(GTest CONFIG REQUIRED)
 # entrypoint da suite, que permanece em `test/main_test.cpp`.
 add_executable(unit_tests
                main_test.cpp
+               gt_datahub/public_types_test.cpp
+               gt_datahub/data_type_header_test.cpp
+               gt_datahub/quality_header_test.cpp
+               gt_datahub/variable_role_header_test.cpp
+               gt_datahub/timestamp_header_test.cpp
+               gt_datahub/errors_header_test.cpp
 )
 
 target_include_directories(unit_tests BEFORE

@@ -15,7 +15,7 @@ Este checklist foi derivado do roadmap `datahub_roadmap_v3_7_2.md` e serve como 
 ## Visão geral de progresso
 
 - [x] Fase 0 — Congelamento da baseline e governança
-- [ ] Fase 1 — API pública e tipos centrais
+- [~] Fase 1 — API pública e tipos centrais
 - [ ] Fase 2 — Catálogo, store e bootstrap de estado
 - [ ] Fase 3 — YAML compiler e validação
 - [ ] Fase 4 — Runtime, ownership e lifecycle
@@ -96,17 +96,17 @@ Este checklist foi derivado do roadmap `datahub_roadmap_v3_7_2.md` e serve como 
 
 ### Sprint 1.1 — Enums e aliases públicos
 #### Implementação
-- [ ] Criar `DataType`
-- [ ] Criar `Quality`
-- [ ] Criar `VariableRole`
-- [ ] Criar enums/structs de erro públicos
-- [ ] Criar alias `Timestamp`
+- [x] Criar `DataType`
+- [x] Criar `Quality`
+- [x] Criar `VariableRole`
+- [x] Criar enums/structs de erro públicos
+- [x] Criar alias `Timestamp`
 
 #### Testes
-- [ ] UT: construção e comparação de enums
-- [ ] UT: códigos de erro têm valores/defaults coerentes
-- [ ] RT: includes públicos não quebram dependências
-- [ ] ST: TU simples compila e instancia tipos
+- [x] UT: construção e comparação de enums
+- [x] UT: códigos de erro têm valores/defaults coerentes
+- [x] RT: includes públicos não quebram dependências
+- [x] ST: TU simples compila e instancia tipos
 
 ### Sprint 1.2 — `Value`, definições e estado
 #### Implementação
