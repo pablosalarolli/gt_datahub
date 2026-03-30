@@ -4,13 +4,14 @@ project(gt_datahub)
 
 # Inicializa pacote gtfw
 find_package(gtfw_cmake REQUIRED)
-find_package(yaml-cpp CONFIG REQUIRED)
 
 gtfw_package_init()
 
 ##############################################
 # INCLUINDO DEPENDÊNCIAS EXTERNAS
 ##############################################
+
+find_package(yaml-cpp CONFIG REQUIRED)
 
 
 ##############################################
