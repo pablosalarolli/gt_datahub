@@ -205,18 +205,18 @@ Este checklist foi derivado do roadmap `datahub_roadmap_v3_7_2.md` e serve como 
 
 ### Sprint 3.2 — Parsing e validação de bindings
 #### Implementação
-- [ ] Implementar parsing de `producer_bindings`
-- [ ] Implementar parsing de `consumer_bindings`
-- [ ] Implementar parsing de `file_exports`
-- [ ] Validar capacidades por `kind`
-- [ ] Validar ownership de producer
+- [x] Implementar parsing de `producer_bindings`
+- [x] Implementar parsing de `consumer_bindings`
+- [x] Implementar parsing de `file_exports`
+- [x] Validar capacidades por `kind`
+- [x] Validar ownership de producer
 
 #### Testes
-- [ ] UT: binding para connector inexistente falha
-- [ ] UT: mais de 1 producer para a mesma variável falha
-- [ ] UT: `producer_kind: internal` sem `connector_id` é aceito
-- [ ] UT: `consumer_bindings` com modo inválido falham
-- [ ] ST: arquivo consolidado da spec valida
+- [x] UT: binding para connector inexistente falha
+- [x] UT: mais de 1 producer para a mesma variável falha
+- [x] UT: `producer_kind: internal` sem `connector_id` é aceito
+- [x] UT: `consumer_bindings` com modo inválido falham
+- [x] ST: arquivo consolidado da spec valida
 
 ### Sprint 3.3 — Templates e predicados compilados
 #### Implementação
