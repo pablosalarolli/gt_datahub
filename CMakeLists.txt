@@ -24,6 +24,7 @@ set(GTDATAHUB_SRC_FILES
     src/core/selector_parser.hpp
     src/core/text_template_compiler.hpp
     src/core/predicate_compiler.hpp
+    src/runtime/datahub_runtime.hpp
     src/runtime/yaml_loader.hpp
 )
 

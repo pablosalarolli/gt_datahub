@@ -16,6 +16,7 @@ add_executable(unit_tests
                core/predicate_compiler_test.cpp
                core/state_store_test.cpp
                core/state_store_quality_test.cpp
+               runtime/datahub_runtime_test.cpp
                runtime/yaml_loader_test.cpp
                gt_datahub/public_types_test.cpp
                gt_datahub/data_type_header_test.cpp

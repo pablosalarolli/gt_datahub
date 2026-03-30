@@ -18,7 +18,7 @@ Este checklist foi derivado do roadmap `datahub_roadmap_v3_7_2.md` e serve como 
 - [x] Fase 1 — API pública e tipos centrais
 - [x] Fase 2 — Catálogo, store e bootstrap de estado
 - [x] Fase 3 — YAML compiler e validação
-- [ ] Fase 4 — Runtime, ownership e lifecycle
+- [~] Fase 4 — Runtime, ownership e lifecycle
 - [ ] Fase 5 — Seletores, `resolveText()` e predicados
 - [ ] Fase 6 — File source e file export
 - [ ] Fase 7 — Adapters OPC UA / OPC DA
@@ -242,15 +242,15 @@ Este checklist foi derivado do roadmap `datahub_roadmap_v3_7_2.md` e serve como 
 
 ### Sprint 4.1 — Runtime core
 #### Implementação
-- [ ] Implementar `DataHubRuntime`
-- [ ] Separar bootstrap de `start()`
-- [ ] Implementar `start()` e `stop()`
-- [ ] Inicializar connector runtimes e scheduler apenas no `start()`
+- [x] Implementar `DataHubRuntime`
+- [x] Separar bootstrap de `start()`
+- [x] Implementar `start()` e `stop()`
+- [x] Inicializar connector runtimes e scheduler apenas no `start()`
 
 #### Testes
-- [ ] UT: `start()` duplo falha com erro coerente
-- [ ] UT: `stop()` é idempotente
-- [ ] ST: runtime sobe e desce sem adapters reais
+- [x] UT: `start()` duplo falha com erro coerente
+- [x] UT: `stop()` é idempotente
+- [x] ST: runtime sobe e desce sem adapters reais
 
 ### Sprint 4.2 — Ownership de escrita e internal producer
 #### Implementação

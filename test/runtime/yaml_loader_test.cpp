@@ -25,9 +25,10 @@ datahub:
   variables: []
 )yaml");
 
-  ASSERT_TRUE(config_result.has_value())
-      << static_cast<int>(config_result.error().code) << ": "
-      << config_result.error().message;
+  if (!config_result.has_value()) {
+    FAIL() << static_cast<int>(config_result.error().code) << ": "
+           << config_result.error().message;
+  }
   const LoadedDatahubConfig& config = *config_result;
 
   EXPECT_EQ(config.schema_version, 1);
@@ -106,9 +107,10 @@ datahub:
       default_value: "2026-03-30T12:34:56.789Z"
 )yaml");
 
-  ASSERT_TRUE(config_result.has_value())
-      << static_cast<int>(config_result.error().code) << ": "
-      << config_result.error().message;
+  if (!config_result.has_value()) {
+    FAIL() << static_cast<int>(config_result.error().code) << ": "
+           << config_result.error().message;
+  }
   const LoadedDatahubConfig& config = *config_result;
 
   ASSERT_EQ(config.connectors.size(), std::size_t{1});
@@ -223,9 +225,10 @@ datahub:
       enabled: true
 )yaml");
 
-  ASSERT_TRUE(config_result.has_value())
-      << static_cast<int>(config_result.error().code) << ": "
-      << config_result.error().message;
+  if (!config_result.has_value()) {
+    FAIL() << static_cast<int>(config_result.error().code) << ": "
+           << config_result.error().message;
+  }
   const LoadedDatahubConfig& config = *config_result;
 
   ASSERT_EQ(config.producer_bindings.size(), std::size_t{1});
@@ -311,9 +314,10 @@ datahub:
           source: hub.TEMP.value
 )yaml");
 
-  ASSERT_TRUE(config_result.has_value())
-      << static_cast<int>(config_result.error().code) << ": "
-      << config_result.error().message;
+  if (!config_result.has_value()) {
+    FAIL() << static_cast<int>(config_result.error().code) << ": "
+           << config_result.error().message;
+  }
   const LoadedDatahubConfig& config = *config_result;
 
   ASSERT_EQ(config.file_exports.size(), std::size_t{1});
@@ -513,9 +517,10 @@ datahub:
           expression: "${hub.ALARME_ESCORIA.value}"
 )yaml");
 
-  ASSERT_TRUE(config_result.has_value())
-      << static_cast<int>(config_result.error().code) << ": "
-      << config_result.error().message;
+  if (!config_result.has_value()) {
+    FAIL() << static_cast<int>(config_result.error().code) << ": "
+           << config_result.error().message;
+  }
   const LoadedDatahubConfig& config = *config_result;
 
   EXPECT_EQ(config.connectors.size(), std::size_t{3});
