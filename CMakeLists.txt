@@ -4,6 +4,7 @@ project(gt_datahub)
 
 # Inicializa pacote gtfw
 find_package(gtfw_cmake REQUIRED)
+find_package(yaml-cpp CONFIG REQUIRED)
 
 gtfw_package_init()
 
@@ -19,6 +20,7 @@ gtfw_package_init()
 set(GTDATAHUB_SRC_FILES
     src/core/compiled_catalog.hpp
     src/core/state_store.hpp
+    src/runtime/yaml_loader.hpp
 )
 
 set(GTDATAHUB_HEADER_FILES
@@ -50,6 +52,10 @@ target_include_directories(gt_datahub
 ##############################################
 
 # # Bibliotecas para link da lib
+target_link_libraries(gt_datahub
+    INTERFACE
+        yaml-cpp::yaml-cpp
+)
 
 ##############################################
 # AJUSTES FINAIS DO PACOTE

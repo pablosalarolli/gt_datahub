@@ -192,16 +192,16 @@ Este checklist foi derivado do roadmap `datahub_roadmap_v3_7_2.md` e serve como 
 
 ### Sprint 3.1 — Parsing de `connectors` e `variables`
 #### Implementação
-- [ ] Implementar loader YAML básico
-- [ ] Implementar parsing de `connectors`
-- [ ] Implementar parsing de `variables`
-- [ ] Validar unicidade de IDs e nomes
+- [x] Implementar loader YAML básico
+- [x] Implementar parsing de `connectors`
+- [x] Implementar parsing de `variables`
+- [x] Validar unicidade de IDs e nomes
 
 #### Testes
-- [ ] UT: YAML mínimo válido
-- [ ] UT: `connector_id` duplicado falha
-- [ ] UT: `variable.name` duplicado falha
-- [ ] ST: carregamento de configuração simples
+- [x] UT: YAML mínimo válido
+- [x] UT: `connector_id` duplicado falha
+- [x] UT: `variable.name` duplicado falha
+- [x] ST: carregamento de configuração simples
 
 ### Sprint 3.2 — Parsing e validação de bindings
 #### Implementação

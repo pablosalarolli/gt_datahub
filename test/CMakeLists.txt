@@ -13,6 +13,7 @@ add_executable(unit_tests
                core/compiled_catalog_test.cpp
                core/state_store_test.cpp
                core/state_store_quality_test.cpp
+               runtime/yaml_loader_test.cpp
                gt_datahub/public_types_test.cpp
                gt_datahub/data_type_header_test.cpp
                gt_datahub/quality_header_test.cpp
