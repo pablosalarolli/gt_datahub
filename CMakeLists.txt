@@ -17,6 +17,7 @@ gtfw_package_init()
 ##############################################
 
 set(GTDATAHUB_SRC_FILES
+    src/core/compiled_catalog.hpp
 )
 
 set(GTDATAHUB_HEADER_FILES

@@ -16,7 +16,7 @@ Este checklist foi derivado do roadmap `datahub_roadmap_v3_7_2.md` e serve como 
 
 - [x] Fase 0 — Congelamento da baseline e governança
 - [x] Fase 1 — API pública e tipos centrais
-- [ ] Fase 2 — Catálogo, store e bootstrap de estado
+- [~] Fase 2 — Catálogo, store e bootstrap de estado
 - [ ] Fase 3 — YAML compiler e validação
 - [ ] Fase 4 — Runtime, ownership e lifecycle
 - [ ] Fase 5 — Seletores, `resolveText()` e predicados
@@ -146,16 +146,16 @@ Este checklist foi derivado do roadmap `datahub_roadmap_v3_7_2.md` e serve como 
 
 ### Sprint 2.1 — Catálogo compilado
 #### Implementação
-- [ ] Implementar `CompiledVariableDefinition`
-- [ ] Implementar índice por nome
-- [ ] Implementar lookup heterogêneo por `std::string_view`
-- [ ] Fechar mapa imutável após bootstrap
+- [x] Implementar `CompiledVariableDefinition`
+- [x] Implementar índice por nome
+- [x] Implementar lookup heterogêneo por `std::string_view`
+- [x] Fechar mapa imutável após bootstrap
 
 #### Testes
-- [ ] UT: lookup por nome existente
-- [ ] UT: lookup por nome inexistente
-- [ ] UT: heterogeneous lookup não exige alocação temporária observável
-- [ ] ST: catálogo mínimo compila e consulta
+- [x] UT: lookup por nome existente
+- [x] UT: lookup por nome inexistente
+- [x] UT: heterogeneous lookup não exige alocação temporária observável
+- [x] ST: catálogo mínimo compila e consulta
 
 ### Sprint 2.2 — State store e bootstrap
 #### Implementação
