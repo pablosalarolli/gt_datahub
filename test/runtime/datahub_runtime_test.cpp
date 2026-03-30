@@ -9,6 +9,7 @@
 #include <string_view>
 #include <utility>
 #include <variant>
+#include <vector>
 
 namespace {
 
@@ -18,6 +19,7 @@ using gt::datahub::RuntimeErrorCode;
 using gt::datahub::SubmitErrorCode;
 using gt::datahub::UpdateRequest;
 using gt::datahub::runtime::DataHubRuntime;
+using gt::datahub::runtime::OnChangeNotification;
 
 constexpr std::string_view kRuntimeCoreYaml = R"yaml(
 datahub:
@@ -58,6 +60,44 @@ datahub:
   consumer_bindings: []
   file_exports: []
 )yaml";
+
+constexpr std::string_view kOnChangeYaml = R"yaml(
+datahub:
+  schema_version: 1
+  connectors:
+    - id: opc_ua_main
+      kind: opc_ua
+  variables:
+    - name: ALARME_ESCORIA
+      data_type: Bool
+      role: Alarm
+  producer_bindings:
+    - id: pb_alarme_interno
+      variable_name: ALARME_ESCORIA
+      producer_kind: internal
+  consumer_bindings:
+    - id: cb_alarme_escoria_opcua
+      variable_name: ALARME_ESCORIA
+      connector_id: opc_ua_main
+      enabled: true
+      trigger:
+        mode: on_change
+      binding:
+        type: opc_ua.node
+        ns: 2
+        item_id: "N1-ACI.CONV1.ALARME_ESCORIA"
+  file_exports: []
+)yaml";
+
+struct FakeSinkProbe {
+  void accept(const OnChangeNotification& notification) {
+    ++received_count;
+    versions.push_back(notification.version);
+  }
+
+  std::size_t received_count{0};
+  std::vector<std::uint64_t> versions;
+};
 
 std::unique_ptr<DataHubRuntime> makeRuntime(std::string_view yaml_text) {
   auto runtime_result = DataHubRuntime::createFromString(yaml_text);
@@ -208,6 +248,100 @@ TEST(DataHubRuntimeTest, AppPublishesThroughInternalProducer) {
   EXPECT_EQ(state->version, std::uint64_t{1});
   ASSERT_TRUE(std::holds_alternative<double>(state->value));
   EXPECT_DOUBLE_EQ(std::get<double>(state->value), 87.5);
+}
+
+TEST(DataHubRuntimeTest,
+     AcceptedUpdateIncrementsVersionAndGeneratesInternalNotification) {
+  auto runtime = makeRuntime(kOnChangeYaml);
+  ASSERT_NE(runtime, nullptr);
+  ASSERT_TRUE(runtime->start().has_value());
+
+  auto producer_result = runtime->openInternalProducer("pb_alarme_interno");
+  ASSERT_TRUE(producer_result.has_value());
+  ASSERT_NE(*producer_result, nullptr);
+
+  UpdateRequest request;
+  request.value = true;
+
+  ASSERT_TRUE((*producer_result)->submit(std::move(request)).has_value());
+
+  auto state = runtime->hub().getState("ALARME_ESCORIA");
+  ASSERT_TRUE(state.has_value());
+  EXPECT_EQ(state->version, std::uint64_t{1});
+  EXPECT_EQ(runtime->pendingOnChangeNotificationCount(
+                "cb_alarme_escoria_opcua"),
+            std::size_t{1});
+  EXPECT_EQ(runtime->totalPendingOnChangeNotificationCount(), std::size_t{1});
+}
+
+TEST(DataHubRuntimeTest, VariableWithoutConsumerBindingDoesNotGenerateOnChangeWork) {
+  auto runtime = makeRuntime(kInternalProducerYaml);
+  ASSERT_NE(runtime, nullptr);
+  ASSERT_TRUE(runtime->start().has_value());
+
+  auto producer_result = runtime->openInternalProducer("pb_temp_interna");
+  ASSERT_TRUE(producer_result.has_value());
+  ASSERT_NE(*producer_result, nullptr);
+
+  UpdateRequest request;
+  request.value = 90.0;
+
+  ASSERT_TRUE((*producer_result)->submit(std::move(request)).has_value());
+  EXPECT_EQ(runtime->totalPendingOnChangeNotificationCount(), std::size_t{0});
+}
+
+TEST(DataHubRuntimeTest, OnChangeQueuesEveryAcceptedUpdateEvenWhenValueIsEqual) {
+  auto runtime = makeRuntime(kOnChangeYaml);
+  ASSERT_NE(runtime, nullptr);
+  ASSERT_TRUE(runtime->start().has_value());
+
+  auto producer_result = runtime->openInternalProducer("pb_alarme_interno");
+  ASSERT_TRUE(producer_result.has_value());
+  ASSERT_NE(*producer_result, nullptr);
+
+  UpdateRequest first_request;
+  first_request.value = true;
+  ASSERT_TRUE((*producer_result)->submit(std::move(first_request)).has_value());
+
+  UpdateRequest second_request;
+  second_request.value = true;
+  ASSERT_TRUE((*producer_result)->submit(std::move(second_request)).has_value());
+
+  auto state = runtime->hub().getState("ALARME_ESCORIA");
+  ASSERT_TRUE(state.has_value());
+  EXPECT_EQ(state->version, std::uint64_t{2});
+
+  const auto notifications = runtime->drainOnChangeNotificationsForTesting(
+      "cb_alarme_escoria_opcua");
+  ASSERT_EQ(notifications.size(), std::size_t{2});
+  EXPECT_EQ(notifications[0].version, std::uint64_t{1});
+  EXPECT_EQ(notifications[1].version, std::uint64_t{2});
+  EXPECT_EQ(runtime->totalPendingOnChangeNotificationCount(), std::size_t{0});
+}
+
+TEST(DataHubRuntimeTest, InternalUpdateTriggersFakeSinkAfterDispatchDrain) {
+  auto runtime = makeRuntime(kOnChangeYaml);
+  ASSERT_NE(runtime, nullptr);
+  ASSERT_TRUE(runtime->start().has_value());
+
+  auto producer_result = runtime->openInternalProducer("pb_alarme_interno");
+  ASSERT_TRUE(producer_result.has_value());
+  ASSERT_NE(*producer_result, nullptr);
+
+  UpdateRequest request;
+  request.value = true;
+  ASSERT_TRUE((*producer_result)->submit(std::move(request)).has_value());
+
+  FakeSinkProbe fake_sink;
+  for (const auto& notification :
+       runtime->drainOnChangeNotificationsForTesting(
+           "cb_alarme_escoria_opcua")) {
+    fake_sink.accept(notification);
+  }
+
+  EXPECT_EQ(fake_sink.received_count, std::size_t{1});
+  ASSERT_EQ(fake_sink.versions.size(), std::size_t{1});
+  EXPECT_EQ(fake_sink.versions.front(), std::uint64_t{1});
 }
 
 }  // namespace

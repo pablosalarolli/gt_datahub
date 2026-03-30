@@ -12,6 +12,7 @@ gtfw_package_init()
 ##############################################
 
 find_package(yaml-cpp CONFIG REQUIRED)
+find_package(gt_concurrency REQUIRED)
 
 
 ##############################################
@@ -25,6 +26,7 @@ set(GTDATAHUB_SRC_FILES
     src/core/text_template_compiler.hpp
     src/core/predicate_compiler.hpp
     src/runtime/i_runtime_hub_access.hpp
+    src/runtime/on_change_dispatcher.hpp
     src/runtime/datahub_runtime.hpp
     src/runtime/yaml_loader.hpp
 )
@@ -60,6 +62,7 @@ target_include_directories(gt_datahub
 # # Bibliotecas para link da lib
 target_link_libraries(gt_datahub
     INTERFACE
+        gtfw::gt_concurrency::gt_concurrency
         yaml-cpp::yaml-cpp
 )
 

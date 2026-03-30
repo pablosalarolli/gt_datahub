@@ -18,7 +18,7 @@ Este checklist foi derivado do roadmap `datahub_roadmap_v3_7_2.md` e serve como 
 - [x] Fase 1 — API pública e tipos centrais
 - [x] Fase 2 — Catálogo, store e bootstrap de estado
 - [x] Fase 3 — YAML compiler e validação
-- [~] Fase 4 — Runtime, ownership e lifecycle
+- [x] Fase 4 — Runtime, ownership e lifecycle
 - [ ] Fase 5 — Seletores, `resolveText()` e predicados
 - [ ] Fase 6 — File source e file export
 - [ ] Fase 7 — Adapters OPC UA / OPC DA
@@ -268,18 +268,18 @@ Este checklist foi derivado do roadmap `datahub_roadmap_v3_7_2.md` e serve como 
 
 ### Sprint 4.3 — Dispatch de `on_change`
 #### Implementação
-- [ ] Implementar despacho interno para sinks após submit aceito
-- [ ] Enfileirar notificações leves por binding consumidor
-- [ ] Garantir que hub permaneça passivo
+- [x] Implementar despacho interno para sinks após submit aceito
+- [x] Enfileirar notificações leves por binding consumidor
+- [x] Garantir que hub permaneça passivo
 
 #### Testes
-- [ ] UT: update aceito gera notificação interna para sink correspondente
-- [ ] UT: variável sem consumer binding não gera trabalho adicional
-- [ ] ST: update interno aciona sink fake
+- [x] UT: update aceito gera notificação interna para sink correspondente
+- [x] UT: variável sem consumer binding não gera trabalho adicional
+- [x] ST: update interno aciona sink fake
 
 ### Critério de saída da fase
-- [ ] Runtime básico já sobe, aceita producer interno e despacha `on_change`
-- [ ] Invariante de 1 produtor está realmente reforçado
+- [x] Runtime básico já sobe, aceita producer interno e despacha `on_change`
+- [x] Invariante de 1 produtor está realmente reforçado
 
 ---
 

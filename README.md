@@ -26,6 +26,6 @@ O ponto de entrada de governança e planejamento fica em:
 ## Estado atual
 
 O projeto segue a ordem técnica definida no roadmap da baseline `v3.7.2`.
-A fase 3 foi encerrada com o YAML compiler e a validação estrutural da
-baseline implementados e validados. O próximo foco de implementação é a fase
-4, dedicada ao runtime, ownership e lifecycle.
+A fase 4 foi encerrada com o runtime básico, ownership de escrita e o dispatch
+interno de `on_change` implementados e validados. O próximo foco de
+implementação é a fase 5, dedicada a seletores, `resolveText()` e predicados.

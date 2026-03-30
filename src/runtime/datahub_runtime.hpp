@@ -4,6 +4,7 @@
 #include "core/state_store.hpp"
 #include "gt_datahub/i_datahub_runtime.hpp"
 #include "runtime/i_runtime_hub_access.hpp"
+#include "runtime/on_change_dispatcher.hpp"
 #include "runtime/yaml_loader.hpp"
 
 #include <chrono>
@@ -98,6 +99,7 @@ class DataHubRuntime final : public IDataHubRuntime, public IRuntimeHubAccess {
     m_started = false;
     m_scheduler_active = false;
     m_connector_runtimes.clear();
+    m_on_change_dispatcher.clear();
     for (auto& binding_generation :
          m_internal_producer_open_state->open_generations) {
       binding_generation.reset();
@@ -213,6 +215,33 @@ class DataHubRuntime final : public IDataHubRuntime, public IRuntimeHubAccess {
     return m_scheduler_active;
   }
 
+  /**
+   * Returns pending `on_change` notifications for one consumer binding.
+   *
+   * Internal test hook until real sink workers are introduced.
+   */
+  std::size_t pendingOnChangeNotificationCount(
+      std::string_view binding_id) const noexcept {
+    return m_on_change_dispatcher.pendingCount(binding_id);
+  }
+
+  /**
+   * Returns the total amount of pending `on_change` work.
+   *
+   * Internal test hook until sink adapters own their own queues/workers.
+   */
+  std::size_t totalPendingOnChangeNotificationCount() const noexcept {
+    return m_on_change_dispatcher.totalPendingCount();
+  }
+
+  /**
+   * Drains one consumer queue for internal tests.
+   */
+  std::vector<OnChangeNotification> drainOnChangeNotificationsForTesting(
+      std::string_view binding_id) {
+    return m_on_change_dispatcher.drainAll(binding_id);
+  }
+
   std::expected<void, SubmitError> submitFromProducer(
       ProducerToken token, RuntimeUpdateRequest req) override {
     std::scoped_lock lock(m_lifecycle_mtx);
@@ -246,6 +275,10 @@ class DataHubRuntime final : public IDataHubRuntime, public IRuntimeHubAccess {
     ++entry->version;
     entry->initialized = true;
     entry->last_update_steady = std::chrono::steady_clock::now();
+    const auto accepted_version = entry->version;
+    entry_lock.unlock();
+
+    dispatchAcceptedUpdate(token.variable_index, accepted_version);
     return {};
   }
 
@@ -269,6 +302,10 @@ class DataHubRuntime final : public IDataHubRuntime, public IRuntimeHubAccess {
     entry->hub_timestamp = std::chrono::system_clock::now();
     ++entry->version;
     entry->last_update_steady = std::chrono::steady_clock::now();
+    const auto accepted_version = entry->version;
+    entry_lock.unlock();
+
+    dispatchAcceptedUpdate(token.variable_index, accepted_version);
   }
 
  private:
@@ -358,12 +395,14 @@ class DataHubRuntime final : public IDataHubRuntime, public IRuntimeHubAccess {
 
   DataHubRuntime(LoadedDatahubConfig config, core::StateStore store,
                  std::vector<ProducerToken> producer_tokens,
-                 std::shared_ptr<InternalProducerOpenState> open_state)
+                 std::shared_ptr<InternalProducerOpenState> open_state,
+                 OnChangeDispatcher on_change_dispatcher)
       : m_config(std::move(config)),
         m_store(std::move(store)),
         m_hub(&m_store),
         m_producer_tokens(std::move(producer_tokens)),
-        m_internal_producer_open_state(std::move(open_state)) {}
+        m_internal_producer_open_state(std::move(open_state)),
+        m_on_change_dispatcher(std::move(on_change_dispatcher)) {}
 
   static std::expected<std::unique_ptr<DataHubRuntime>, RuntimeError> create(
       LoadedDatahubConfig config) {
@@ -383,9 +422,23 @@ class DataHubRuntime final : public IDataHubRuntime, public IRuntimeHubAccess {
     auto open_state = std::make_shared<InternalProducerOpenState>();
     open_state->open_generations.resize(config.producer_bindings.size());
 
+    auto on_change_dispatcher = OnChangeDispatcher::build(config, store);
+    if (!on_change_dispatcher.has_value()) {
+      return std::unexpected(on_change_dispatcher.error());
+    }
+
     return std::unique_ptr<DataHubRuntime>(
         new DataHubRuntime(std::move(config), std::move(store),
-                           std::move(*producer_tokens), std::move(open_state)));
+                           std::move(*producer_tokens), std::move(open_state),
+                           std::move(*on_change_dispatcher)));
+  }
+
+  void dispatchAcceptedUpdate(std::size_t variable_index,
+                              std::uint64_t accepted_version) noexcept {
+    // The hub stays passive; `on_change` fan-out happens only on the internal
+    // path of an already accepted runtime update.
+    m_on_change_dispatcher.enqueueAcceptedUpdate(variable_index,
+                                                 accepted_version);
   }
 
   static std::expected<std::vector<ProducerToken>, RuntimeError>
@@ -559,6 +612,7 @@ class DataHubRuntime final : public IDataHubRuntime, public IRuntimeHubAccess {
   RuntimeHub m_hub;
   std::vector<ProducerToken> m_producer_tokens;
   std::shared_ptr<InternalProducerOpenState> m_internal_producer_open_state;
+  OnChangeDispatcher m_on_change_dispatcher;
   bool m_started{false};
   bool m_ever_started{false};
   std::uint64_t m_start_generation{0};
