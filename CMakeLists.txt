@@ -29,6 +29,9 @@ set(GTDATAHUB_HEADER_FILES
     include/gt_datahub/variable_definition.hpp
     include/gt_datahub/variable_state.hpp
     include/gt_datahub/update_request.hpp
+    include/gt_datahub/i_datahub.hpp
+    include/gt_datahub/i_internal_producer.hpp
+    include/gt_datahub/i_datahub_runtime.hpp
     include/gt_datahub/errors.hpp
 )
 

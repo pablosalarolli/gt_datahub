@@ -25,6 +25,11 @@ add_executable(unit_tests
                gt_datahub/variable_definition_header_test.cpp
                gt_datahub/variable_state_header_test.cpp
                gt_datahub/update_request_header_test.cpp
+               gt_datahub/i_datahub_header_test.cpp
+               gt_datahub/i_internal_producer_header_test.cpp
+               gt_datahub/i_datahub_runtime_header_test.cpp
+               gt_datahub/interface_mocks_test.cpp
+               gt_datahub/public_api_smoke_test.cpp
 )
 
 target_include_directories(unit_tests BEFORE

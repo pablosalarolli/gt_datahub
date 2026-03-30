@@ -26,5 +26,5 @@ O ponto de entrada de governança e planejamento fica em:
 ## Estado atual
 
 O projeto segue a ordem técnica definida no roadmap da baseline `v3.7.2`.
-A fase 0 foi encerrada e o próximo foco de implementação é a fase 1, dedicada
-à API pública e aos tipos centrais da biblioteca.
+A fase 1 foi encerrada com a API pública mínima validada. O próximo foco de
+implementação é a fase 2, dedicada a catálogo, store e bootstrap de estado.

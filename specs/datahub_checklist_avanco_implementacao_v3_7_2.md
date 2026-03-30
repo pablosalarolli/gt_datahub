@@ -15,7 +15,7 @@ Este checklist foi derivado do roadmap `datahub_roadmap_v3_7_2.md` e serve como 
 ## Visão geral de progresso
 
 - [x] Fase 0 — Congelamento da baseline e governança
-- [~] Fase 1 — API pública e tipos centrais
+- [x] Fase 1 — API pública e tipos centrais
 - [ ] Fase 2 — Catálogo, store e bootstrap de estado
 - [ ] Fase 3 — YAML compiler e validação
 - [ ] Fase 4 — Runtime, ownership e lifecycle
@@ -124,21 +124,21 @@ Este checklist foi derivado do roadmap `datahub_roadmap_v3_7_2.md` e serve como 
 
 ### Sprint 1.3 — Interfaces públicas
 #### Implementação
-- [ ] Implementar headers de `IDataHub`
-- [ ] Implementar headers de `IDataHubRuntime`
-- [ ] Implementar headers de `IInternalProducer`
-- [ ] Fechar assinaturas públicas da baseline
+- [x] Implementar headers de `IDataHub`
+- [x] Implementar headers de `IDataHubRuntime`
+- [x] Implementar headers de `IInternalProducer`
+- [x] Fechar assinaturas públicas da baseline
 
 #### Testes
-- [ ] UT: mocks simples compõem contra as interfaces
-- [ ] RT: includes públicos continuam independentes
-- [ ] ST: app mínima compila contra a API
+- [x] UT: mocks simples compõem contra as interfaces
+- [x] RT: includes públicos continuam independentes
+- [x] ST: app mínima compila contra a API
 
 ### Critério de saída da fase
-- [ ] A API pública compila
-- [ ] Os nomes principais estão estabilizados
-- [ ] Os tipos base não estão mais em disputa
-- [ ] Docstrings mínimas das APIs públicas foram adicionadas
+- [x] A API pública compila
+- [x] Os nomes principais estão estabilizados
+- [x] Os tipos base não estão mais em disputa
+- [x] Docstrings mínimas das APIs públicas foram adicionadas
 
 ---
 
