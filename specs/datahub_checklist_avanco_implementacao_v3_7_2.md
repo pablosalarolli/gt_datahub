@@ -159,16 +159,16 @@ Este checklist foi derivado do roadmap `datahub_roadmap_v3_7_2.md` e serve como 
 
 ### Sprint 2.2 — State store e bootstrap
 #### Implementação
-- [ ] Implementar `VariableStateEntry`
-- [ ] Implementar bootstrap do estado a partir do catálogo
-- [ ] Aplicar `default_value` diretamente na store
-- [ ] Implementar `getState`, `getDefinition`, `listVariables`
+- [x] Implementar `VariableStateEntry`
+- [x] Implementar bootstrap do estado a partir do catálogo
+- [x] Aplicar `default_value` diretamente na store
+- [x] Implementar `getState`, `getDefinition`, `listVariables`
 
 #### Testes
-- [ ] UT: `default_value` inicializa variável como `initialized=true`
-- [ ] UT: `getState()` retorna `std::nullopt` para variável inexistente
-- [ ] UT: `listVariables()` retorna conjunto estável pós-bootstrap
-- [ ] ST: bootstrap completo com duas variáveis
+- [x] UT: `default_value` inicializa variável como `initialized=true`
+- [x] UT: `getState()` retorna `std::nullopt` para variável inexistente
+- [x] UT: `listVariables()` retorna conjunto estável pós-bootstrap
+- [x] ST: bootstrap completo com duas variáveis
 
 ### Sprint 2.3 — Qualidade efetiva e stale lazy
 #### Implementação

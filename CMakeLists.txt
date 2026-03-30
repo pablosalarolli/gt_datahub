@@ -18,6 +18,7 @@ gtfw_package_init()
 
 set(GTDATAHUB_SRC_FILES
     src/core/compiled_catalog.hpp
+    src/core/state_store.hpp
 )
 
 set(GTDATAHUB_HEADER_FILES
