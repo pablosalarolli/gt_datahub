@@ -11,6 +11,9 @@ find_package(GTest CONFIG REQUIRED)
 add_executable(unit_tests
                main_test.cpp
                core/compiled_catalog_test.cpp
+               core/selector_parser_test.cpp
+               core/text_template_compiler_test.cpp
+               core/predicate_compiler_test.cpp
                core/state_store_test.cpp
                core/state_store_quality_test.cpp
                runtime/yaml_loader_test.cpp

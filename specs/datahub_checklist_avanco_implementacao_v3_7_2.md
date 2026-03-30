@@ -17,7 +17,7 @@ Este checklist foi derivado do roadmap `datahub_roadmap_v3_7_2.md` e serve como 
 - [x] Fase 0 — Congelamento da baseline e governança
 - [x] Fase 1 — API pública e tipos centrais
 - [x] Fase 2 — Catálogo, store e bootstrap de estado
-- [ ] Fase 3 — YAML compiler e validação
+- [x] Fase 3 — YAML compiler e validação
 - [ ] Fase 4 — Runtime, ownership e lifecycle
 - [ ] Fase 5 — Seletores, `resolveText()` e predicados
 - [ ] Fase 6 — File source e file export
@@ -220,21 +220,21 @@ Este checklist foi derivado do roadmap `datahub_roadmap_v3_7_2.md` e serve como 
 
 ### Sprint 3.3 — Templates e predicados compilados
 #### Implementação
-- [ ] Compilar `source` canônico
-- [ ] Compilar templates interpolados
-- [ ] Compilar AST de predicados
-- [ ] Validar operadores unários/binários
+- [x] Compilar `source` canônico
+- [x] Compilar templates interpolados
+- [x] Compilar AST de predicados
+- [x] Validar operadores unários/binários
 
 #### Testes
-- [ ] UT: seletor puro válido
-- [ ] UT: template válido com `${...}`
-- [ ] UT: operador unário sem `value` é aceito
-- [ ] UT: operador binário sem `value` falha
-- [ ] ST: predicado `all/any/not` compilado corretamente
+- [x] UT: seletor puro válido
+- [x] UT: template válido com `${...}`
+- [x] UT: operador unário sem `value` é aceito
+- [x] UT: operador binário sem `value` falha
+- [x] ST: predicado `all/any/not` compilado corretamente
 
 ### Critério de saída da fase
-- [ ] Configuração YAML relevante da baseline compila e valida
-- [ ] Erros de configuração surgem no bootstrap
+- [x] Configuração YAML relevante da baseline compila e valida
+- [x] Erros de configuração surgem no bootstrap
 
 ---
 

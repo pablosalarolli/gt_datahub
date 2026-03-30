@@ -25,7 +25,9 @@ datahub:
   variables: []
 )yaml");
 
-  ASSERT_TRUE(config_result.has_value());
+  ASSERT_TRUE(config_result.has_value())
+      << static_cast<int>(config_result.error().code) << ": "
+      << config_result.error().message;
   const LoadedDatahubConfig& config = *config_result;
 
   EXPECT_EQ(config.schema_version, 1);
@@ -104,7 +106,9 @@ datahub:
       default_value: "2026-03-30T12:34:56.789Z"
 )yaml");
 
-  ASSERT_TRUE(config_result.has_value());
+  ASSERT_TRUE(config_result.has_value())
+      << static_cast<int>(config_result.error().code) << ": "
+      << config_result.error().message;
   const LoadedDatahubConfig& config = *config_result;
 
   ASSERT_EQ(config.connectors.size(), std::size_t{1});
@@ -219,7 +223,9 @@ datahub:
       enabled: true
 )yaml");
 
-  ASSERT_TRUE(config_result.has_value());
+  ASSERT_TRUE(config_result.has_value())
+      << static_cast<int>(config_result.error().code) << ": "
+      << config_result.error().message;
   const LoadedDatahubConfig& config = *config_result;
 
   ASSERT_EQ(config.producer_bindings.size(), std::size_t{1});
@@ -280,6 +286,41 @@ datahub:
             YamlLoadErrorCode::InvalidConnectorCapability);
   EXPECT_NE(config_result.error().message.find("not supported"),
             std::string::npos);
+}
+
+TEST(YamlLoaderTest, FileExportSourceColumnCompilesCanonicalSelector) {
+  const auto config_result = YamlLoader::loadFromString(R"yaml(
+datahub:
+  schema_version: 1
+  connectors:
+    - id: file_main
+      kind: file
+  variables:
+    - name: TEMP
+      data_type: Float
+      role: Measurement
+  file_exports:
+    - id: exp_temp
+      connector_id: file_main
+      format: csv
+      target_template: "saida/${system.now}.csv"
+      trigger:
+        mode: manual
+      columns:
+        - name: temp
+          source: hub.TEMP.value
+)yaml");
+
+  ASSERT_TRUE(config_result.has_value())
+      << static_cast<int>(config_result.error().code) << ": "
+      << config_result.error().message;
+  const LoadedDatahubConfig& config = *config_result;
+
+  ASSERT_EQ(config.file_exports.size(), std::size_t{1});
+  ASSERT_EQ(config.file_exports[0].columns.size(), std::size_t{1});
+  EXPECT_TRUE(config.file_exports[0].compiled_target_template.hasInterpolations());
+  ASSERT_TRUE(config.file_exports[0].columns[0].compiled_source.has_value());
+  EXPECT_FALSE(config.file_exports[0].columns[0].compiled_expression.has_value());
 }
 
 TEST(YamlLoaderSmokeTest, ConsolidatedSpecificationYamlValidates) {
@@ -472,7 +513,9 @@ datahub:
           expression: "${hub.ALARME_ESCORIA.value}"
 )yaml");
 
-  ASSERT_TRUE(config_result.has_value());
+  ASSERT_TRUE(config_result.has_value())
+      << static_cast<int>(config_result.error().code) << ": "
+      << config_result.error().message;
   const LoadedDatahubConfig& config = *config_result;
 
   EXPECT_EQ(config.connectors.size(), std::size_t{3});
@@ -481,8 +524,14 @@ datahub:
   ASSERT_EQ(config.consumer_bindings.size(), std::size_t{2});
   ASSERT_EQ(config.file_exports.size(), std::size_t{2});
   EXPECT_EQ(config.producer_bindings[3].producer_kind, ProducerKind::Internal);
+  ASSERT_TRUE(config.producer_bindings[2].binding.has_value());
+  ASSERT_TRUE(
+      config.producer_bindings[2].binding->compiled_path_template.has_value());
   ASSERT_EQ(config.file_exports[0].columns.size(), std::size_t{8});
   EXPECT_TRUE(config.file_exports[0].activation.IsMap());
+  EXPECT_TRUE(config.file_exports[0].compiled_target_template.hasInterpolations());
+  ASSERT_NE(config.file_exports[0].compiled_activation, nullptr);
+  ASSERT_TRUE(config.file_exports[0].columns[0].compiled_expression.has_value());
   EXPECT_EQ(config.file_exports[0].trigger.mode, "periodic");
   ASSERT_TRUE(config.file_exports[0].trigger.period_ms.has_value());
   EXPECT_EQ(*config.file_exports[0].trigger.period_ms,

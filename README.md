@@ -26,6 +26,6 @@ O ponto de entrada de governança e planejamento fica em:
 ## Estado atual
 
 O projeto segue a ordem técnica definida no roadmap da baseline `v3.7.2`.
-A fase 2 foi encerrada com catálogo, store e bootstrap de estado validados. O
-próximo foco de implementação é a fase 3, dedicada ao YAML compiler e à
-validação.
+A fase 3 foi encerrada com o YAML compiler e a validação estrutural da
+baseline implementados e validados. O próximo foco de implementação é a fase
+4, dedicada ao runtime, ownership e lifecycle.

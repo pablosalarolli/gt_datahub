@@ -1,5 +1,7 @@
 #pragma once
 
+#include "core/predicate_compiler.hpp"
+#include "core/text_template_compiler.hpp"
 #include "gt_datahub/data_type.hpp"
 #include "gt_datahub/timestamp.hpp"
 #include "gt_datahub/value.hpp"
@@ -12,11 +14,13 @@
 #include <cstddef>
 #include <cstdint>
 #include <expected>
+#include <memory>
 #include <optional>
 #include <string>
 #include <string_view>
 #include <unordered_set>
 #include <utility>
+#include <variant>
 #include <vector>
 
 namespace gt::datahub::runtime {
@@ -79,6 +83,7 @@ struct AcquisitionConfig {
 struct BindingConfig {
   std::string type;
   YAML::Node raw_node{YAML::NodeType::Map};
+  std::optional<core::CompiledTextTemplate> compiled_path_template;
 };
 
 /**
@@ -130,14 +135,16 @@ struct ExportColumnConfig {
   std::string name;
   std::optional<std::string> source;
   std::optional<std::string> expression;
+  std::optional<core::CompiledSelector> compiled_source;
+  std::optional<core::CompiledTextTemplate> compiled_expression;
 };
 
 /**
  * File export definition loaded from YAML.
  *
- * `activation` remains as raw YAML for sprint 3.3, when predicate compilation
- * is introduced. `columns` are parsed structurally here so the loader already
- * enforces the baseline shape of the export contract.
+ * `activation` remains available as raw YAML for later runtime wiring, but
+ * sprint 3.3 already compiles `run_while`, `target_template` and column
+ * selectors/templates into immutable internal structures.
  */
 struct FileExportConfig {
   std::string id;
@@ -148,16 +155,18 @@ struct FileExportConfig {
   bool append{false};
   bool write_header_if_missing{false};
   FileExportTriggerConfig trigger;
-  YAML::Node activation;
+  YAML::Node activation{YAML::NodeType::Undefined};
+  bool finalize_on_stop{false};
   std::vector<ExportColumnConfig> columns;
+  core::CompiledTextTemplate compiled_target_template;
+  std::unique_ptr<core::ConditionNode> compiled_activation;
 };
 
 /**
  * YAML-backed configuration materialized by the current bootstrap phase.
  *
- * At sprint 3.2 the loader owns the structural parsing of connectors,
- * variables, bindings and exports. Selectors, templates and predicates remain
- * uncompiled and will be handled in sprint 3.3.
+ * At sprint 3.3 the loader owns both the structural parsing of the baseline
+ * YAML and the compilation of selectors, text templates and activation ASTs.
  */
 struct LoadedDatahubConfig {
   int schema_version{1};
@@ -172,8 +181,8 @@ struct LoadedDatahubConfig {
  * Minimal YAML loader for bootstrap configuration.
  *
  * The loader now covers the full structural surface needed by phase 3 sprint
- * 3.2: connectors, variables, bindings and file exports, plus the early
- * validation rules that must fail before runtime startup.
+ * 3.3: connectors, variables, bindings, file exports and the declarative
+ * artifacts compiled from selectors/templates/predicates.
  */
 class YamlLoader {
  public:
@@ -229,35 +238,35 @@ class YamlLoader {
     LoadedDatahubConfig config;
     config.schema_version = *schema_version;
 
-    const auto connectors =
+    auto connectors =
         parseConnectors(datahub["connectors"], "datahub.connectors");
     if (!connectors.has_value()) {
       return std::unexpected(connectors.error());
     }
     config.connectors = std::move(*connectors);
 
-    const auto variables =
+    auto variables =
         parseVariables(datahub["variables"], "datahub.variables");
     if (!variables.has_value()) {
       return std::unexpected(variables.error());
     }
     config.variables = std::move(*variables);
 
-    const auto producer_bindings = parseProducerBindings(
+    auto producer_bindings = parseProducerBindings(
         datahub["producer_bindings"], "datahub.producer_bindings");
     if (!producer_bindings.has_value()) {
       return std::unexpected(producer_bindings.error());
     }
     config.producer_bindings = std::move(*producer_bindings);
 
-    const auto consumer_bindings = parseConsumerBindings(
+    auto consumer_bindings = parseConsumerBindings(
         datahub["consumer_bindings"], "datahub.consumer_bindings");
     if (!consumer_bindings.has_value()) {
       return std::unexpected(consumer_bindings.error());
     }
     config.consumer_bindings = std::move(*consumer_bindings);
 
-    const auto file_exports =
+    auto file_exports =
         parseFileExports(datahub["file_exports"], "datahub.file_exports");
     if (!file_exports.has_value()) {
       return std::unexpected(file_exports.error());
@@ -267,6 +276,11 @@ class YamlLoader {
     const auto validation = validateBindingsAndExports(config);
     if (!validation.has_value()) {
       return std::unexpected(validation.error());
+    }
+
+    auto compiled = compileDeclarativeArtifacts(config);
+    if (!compiled.has_value()) {
+      return std::unexpected(compiled.error());
     }
 
     return config;
@@ -800,12 +814,20 @@ class YamlLoader {
     export_config.trigger = std::move(*trigger);
 
     const YAML::Node activation = node["activation"];
-    if (activation) {
+    if (activation.IsDefined()) {
       if (!activation.IsMap()) {
         return invalidFieldType(childPath(field_path, "activation"),
                                 "must be a YAML mapping");
       }
       export_config.activation = activation;
+
+      const auto finalize_on_stop = parseOptionalBool(
+          activation, "finalize_on_stop",
+          childPath(field_path, "activation.finalize_on_stop"));
+      if (!finalize_on_stop.has_value()) {
+        return std::unexpected(finalize_on_stop.error());
+      }
+      export_config.finalize_on_stop = finalize_on_stop->value_or(false);
     }
 
     const auto columns =
@@ -1023,6 +1045,237 @@ class YamlLoader {
     const auto exports = validateFileExports(config);
     if (!exports.has_value()) {
       return std::unexpected(exports.error());
+    }
+
+    return {};
+  }
+
+  static std::expected<void, YamlLoadError> compileDeclarativeArtifacts(
+      LoadedDatahubConfig& config) {
+    const auto producers = compileProducerBindingArtifacts(config);
+    if (!producers.has_value()) {
+      return std::unexpected(producers.error());
+    }
+
+    const auto exports = compileFileExportArtifacts(config);
+    if (!exports.has_value()) {
+      return std::unexpected(exports.error());
+    }
+
+    return {};
+  }
+
+  static std::expected<void, YamlLoadError> compileProducerBindingArtifacts(
+      LoadedDatahubConfig& config) {
+    for (std::size_t i = 0; i < config.producer_bindings.size(); ++i) {
+      auto& binding = config.producer_bindings[i];
+      if (!binding.binding.has_value() || !hasPrefix(binding.binding->type, "file.")) {
+        continue;
+      }
+
+      const auto item_path = childPath("datahub.producer_bindings", i);
+      const YAML::Node path_template = binding.binding->raw_node["path_template"];
+      if (!path_template) {
+        continue;
+      }
+
+      const auto path_template_text =
+          parseRequiredScalar(path_template, childPath(item_path, "binding.path_template"));
+      if (!path_template_text.has_value()) {
+        return std::unexpected(path_template_text.error());
+      }
+
+      auto compiled_template = compileTemplateField(
+          *path_template_text, childPath(item_path, "binding.path_template"),
+          core::SelectorContext::FilePathTemplate);
+      if (!compiled_template.has_value()) {
+        return std::unexpected(compiled_template.error());
+      }
+
+      const auto validate = validateTemplateVariableReferences(
+          config, *compiled_template, childPath(item_path, "binding.path_template"));
+      if (!validate.has_value()) {
+        return std::unexpected(validate.error());
+      }
+
+      binding.binding->compiled_path_template = std::move(*compiled_template);
+    }
+
+    return {};
+  }
+
+  static std::expected<void, YamlLoadError> compileFileExportArtifacts(
+      LoadedDatahubConfig& config) {
+    for (std::size_t i = 0; i < config.file_exports.size(); ++i) {
+      auto& export_config = config.file_exports[i];
+      const auto item_path = childPath("datahub.file_exports", i);
+
+      auto compiled_target_template = compileTemplateField(
+          export_config.target_template, childPath(item_path, "target_template"),
+          core::SelectorContext::FileExport);
+      if (!compiled_target_template.has_value()) {
+        return std::unexpected(compiled_target_template.error());
+      }
+
+      const auto target_validation = validateTemplateVariableReferences(
+          config, *compiled_target_template,
+          childPath(item_path, "target_template"));
+      if (!target_validation.has_value()) {
+        return std::unexpected(target_validation.error());
+      }
+      export_config.compiled_target_template = std::move(*compiled_target_template);
+
+      for (std::size_t column_index = 0; column_index < export_config.columns.size();
+           ++column_index) {
+        auto& column = export_config.columns[column_index];
+        const auto column_path =
+            childPath(childPath(item_path, "columns"), column_index);
+
+        if (column.source.has_value()) {
+          auto compiled_selector = core::SelectorParser::parseCanonical(
+              *column.source, core::SelectorContext::FileExport);
+          if (!compiled_selector.has_value()) {
+            return invalidValue(childPath(column_path, "source"),
+                                compiled_selector.error().message);
+          }
+
+          const auto selector_validation = validateCompiledSelectorReference(
+              config, *compiled_selector, childPath(column_path, "source"));
+          if (!selector_validation.has_value()) {
+            return std::unexpected(selector_validation.error());
+          }
+
+          column.compiled_source = std::move(*compiled_selector);
+        } else if (column.expression.has_value()) {
+          auto compiled_expression = compileTemplateField(
+              *column.expression, childPath(column_path, "expression"),
+              core::SelectorContext::FileExport);
+          if (!compiled_expression.has_value()) {
+            return std::unexpected(compiled_expression.error());
+          }
+
+          const auto expression_validation = validateTemplateVariableReferences(
+              config, *compiled_expression, childPath(column_path, "expression"));
+          if (!expression_validation.has_value()) {
+            return std::unexpected(expression_validation.error());
+          }
+
+          column.compiled_expression = std::move(*compiled_expression);
+        }
+      }
+
+      if (export_config.activation.IsDefined()) {
+        const YAML::Node run_while = export_config.activation["run_while"];
+        if (!run_while) {
+          return missingRequiredField(childPath(item_path, "activation.run_while"));
+        }
+
+        auto compiled_predicate =
+            core::PredicateCompiler::compile(run_while, core::SelectorContext::FileExport);
+        if (!compiled_predicate.has_value()) {
+          return invalidValue(childPath(item_path, "activation.run_while"),
+                              compiled_predicate.error().message);
+        }
+
+        const auto predicate_validation = validatePredicateVariableReferences(
+            config, **compiled_predicate,
+            childPath(item_path, "activation.run_while"));
+        if (!predicate_validation.has_value()) {
+          return std::unexpected(predicate_validation.error());
+        }
+
+        export_config.compiled_activation = std::move(*compiled_predicate);
+      }
+    }
+
+    return {};
+  }
+
+  static std::expected<core::CompiledTextTemplate, YamlLoadError>
+  compileTemplateField(std::string_view text, std::string_view field_path,
+                       core::SelectorContext selector_context) {
+    auto compiled = core::TextTemplateCompiler::compile(text, selector_context);
+    if (!compiled.has_value()) {
+      return invalidValue(field_path, compiled.error().message);
+    }
+
+    if (!compiled->hasInterpolations()) {
+      const auto maybe_selector =
+          core::SelectorParser::parseCanonical(text, selector_context);
+      if (maybe_selector.has_value()) {
+        return invalidValue(
+            field_path,
+            "must use `${...}` syntax when referencing selectors");
+      }
+    }
+
+    return std::move(*compiled);
+  }
+
+  static std::expected<void, YamlLoadError> validateTemplateVariableReferences(
+      const LoadedDatahubConfig& config,
+      const core::CompiledTextTemplate& compiled_template,
+      std::string_view field_path) {
+    for (const auto& segment : compiled_template.segments) {
+      const auto* selector_segment =
+          std::get_if<core::SelectorSegment>(&segment);
+      if (selector_segment == nullptr) {
+        continue;
+      }
+
+      const auto validation = validateCompiledSelectorReference(
+          config, selector_segment->selector, field_path);
+      if (!validation.has_value()) {
+        return std::unexpected(validation.error());
+      }
+    }
+
+    return {};
+  }
+
+  static std::expected<void, YamlLoadError> validatePredicateVariableReferences(
+      const LoadedDatahubConfig& config, const core::ConditionNode& condition,
+      std::string_view field_path) {
+    if (const auto* leaf = std::get_if<core::ConditionLeaf>(&condition.value)) {
+      return validateCompiledSelectorReference(config, leaf->source, field_path);
+    }
+
+    if (const auto* all = std::get_if<core::ConditionAll>(&condition.value)) {
+      for (const auto& child : all->children) {
+        const auto validation =
+            validatePredicateVariableReferences(config, *child, field_path);
+        if (!validation.has_value()) {
+          return std::unexpected(validation.error());
+        }
+      }
+      return {};
+    }
+
+    if (const auto* any = std::get_if<core::ConditionAny>(&condition.value)) {
+      for (const auto& child : any->children) {
+        const auto validation =
+            validatePredicateVariableReferences(config, *child, field_path);
+        if (!validation.has_value()) {
+          return std::unexpected(validation.error());
+        }
+      }
+      return {};
+    }
+
+    const auto* not_node = std::get_if<core::ConditionNot>(&condition.value);
+    if (not_node == nullptr || !not_node->child) {
+      return invalidValue(field_path, "compiled predicate node is malformed");
+    }
+
+    return validatePredicateVariableReferences(config, *not_node->child, field_path);
+  }
+
+  static std::expected<void, YamlLoadError> validateCompiledSelectorReference(
+      const LoadedDatahubConfig& config, const core::CompiledSelector& selector,
+      std::string_view field_path) {
+    const auto variable_name = selector.hubVariableName();
+    if (variable_name.has_value() && !hasVariable(config, *variable_name)) {
+      return unknownVariable(field_path, *variable_name);
     }
 
     return {};

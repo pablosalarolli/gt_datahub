@@ -21,6 +21,9 @@ find_package(yaml-cpp CONFIG REQUIRED)
 set(GTDATAHUB_SRC_FILES
     src/core/compiled_catalog.hpp
     src/core/state_store.hpp
+    src/core/selector_parser.hpp
+    src/core/text_template_compiler.hpp
+    src/core/predicate_compiler.hpp
     src/runtime/yaml_loader.hpp
 )
 
