@@ -191,6 +191,18 @@ class StateStore {
   }
 
   /**
+   * Returns an internal entry by compiled `variable_index`, when valid.
+   */
+  const VariableStateEntry* findEntryByIndex(
+      std::size_t variable_index) const noexcept {
+    if (variable_index >= m_entries.size()) {
+      return nullptr;
+    }
+
+    return &m_entries[variable_index];
+  }
+
+  /**
    * Returns a mutable internal entry by name for runtime code and internal
    * tests that need to simulate updates between bootstrap and full runtime.
    */
@@ -201,6 +213,17 @@ class StateStore {
     }
 
     return &m_entries[*index];
+  }
+
+  /**
+   * Returns a mutable internal entry by compiled `variable_index`, when valid.
+   */
+  VariableStateEntry* findEntryByIndex(std::size_t variable_index) noexcept {
+    if (variable_index >= m_entries.size()) {
+      return nullptr;
+    }
+
+    return &m_entries[variable_index];
   }
 
  private:

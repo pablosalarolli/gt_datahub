@@ -254,17 +254,17 @@ Este checklist foi derivado do roadmap `datahub_roadmap_v3_7_2.md` e serve como 
 
 ### Sprint 4.2 — Ownership de escrita e internal producer
 #### Implementação
-- [ ] Implementar `IRuntimeHubAccess`
-- [ ] Implementar `openInternalProducer()`
-- [ ] Implementar estado `AlreadyOpen` protegido contra corrida
-- [ ] Liberar abertura ao destruir o handle
+- [x] Implementar `IRuntimeHubAccess`
+- [x] Implementar `openInternalProducer()`
+- [x] Implementar estado `AlreadyOpen` protegido contra corrida
+- [x] Liberar abertura ao destruir o handle
 
 #### Testes
-- [ ] UT: abrir binding interno válido
-- [ ] UT: segunda abertura do mesmo binding falha com `AlreadyOpen`
-- [ ] UT: destruir handle libera nova abertura
-- [ ] UT: `submit()` com tipo incompatível é rejeitado
-- [ ] ST: app publica por `IInternalProducer`
+- [x] UT: abrir binding interno válido
+- [x] UT: segunda abertura do mesmo binding falha com `AlreadyOpen`
+- [x] UT: destruir handle libera nova abertura
+- [x] UT: `submit()` com tipo incompatível é rejeitado
+- [x] ST: app publica por `IInternalProducer`
 
 ### Sprint 4.3 — Dispatch de `on_change`
 #### Implementação

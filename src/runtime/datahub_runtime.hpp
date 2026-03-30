@@ -3,6 +3,7 @@
 #include "core/compiled_catalog.hpp"
 #include "core/state_store.hpp"
 #include "gt_datahub/i_datahub_runtime.hpp"
+#include "runtime/i_runtime_hub_access.hpp"
 #include "runtime/yaml_loader.hpp"
 
 #include <chrono>
@@ -28,7 +29,7 @@ namespace gt::datahub::runtime {
  * owns catalog/store state immediately after creation, while connector runtime
  * slots and the scheduler placeholder only become active during `start()`.
  */
-class DataHubRuntime final : public IDataHubRuntime {
+class DataHubRuntime final : public IDataHubRuntime, public IRuntimeHubAccess {
  public:
   /**
    * Builds one runtime instance from a YAML document already available in
@@ -63,7 +64,7 @@ class DataHubRuntime final : public IDataHubRuntime {
   DataHubRuntime& operator=(const DataHubRuntime&) = delete;
   DataHubRuntime(DataHubRuntime&&) = delete;
   DataHubRuntime& operator=(DataHubRuntime&&) = delete;
-  ~DataHubRuntime() override = default;
+  ~DataHubRuntime() override { stop(); }
 
   std::expected<void, RuntimeError> start() override {
     std::scoped_lock lock(m_lifecycle_mtx);
@@ -88,7 +89,7 @@ class DataHubRuntime final : public IDataHubRuntime {
   }
 
   void stop() override {
-    std::scoped_lock lock(m_lifecycle_mtx);
+    std::scoped_lock lock(m_lifecycle_mtx, m_internal_producer_open_state->mtx);
 
     if (!m_started) {
       return;
@@ -97,6 +98,10 @@ class DataHubRuntime final : public IDataHubRuntime {
     m_started = false;
     m_scheduler_active = false;
     m_connector_runtimes.clear();
+    for (auto& binding_generation :
+         m_internal_producer_open_state->open_generations) {
+      binding_generation.reset();
+    }
   }
 
   IDataHub& hub() noexcept override { return m_hub; }
@@ -105,7 +110,7 @@ class DataHubRuntime final : public IDataHubRuntime {
 
   std::expected<std::unique_ptr<IInternalProducer>, OpenProducerError>
   openInternalProducer(std::string_view binding_id) override {
-    std::scoped_lock lock(m_lifecycle_mtx);
+    std::scoped_lock lock(m_lifecycle_mtx, m_internal_producer_open_state->mtx);
 
     if (!m_started) {
       return std::unexpected(OpenProducerError{
@@ -135,12 +140,19 @@ class DataHubRuntime final : public IDataHubRuntime {
           "binding is disabled: " + std::string(binding.id)});
     }
 
-    // Sprint 4.1 gates internal writers by runtime lifecycle only. The
-    // dedicated `AlreadyOpen` ownership guard is introduced in sprint 4.2.
+    auto& open_generation =
+        m_internal_producer_open_state->open_generations[*binding_index];
+    if (open_generation.has_value()) {
+      return std::unexpected(OpenProducerError{
+          OpenProducerErrorCode::AlreadyOpen,
+          "binding is already open: " + std::string(binding.id)});
+    }
+
     std::unique_ptr<IInternalProducer> producer =
         std::make_unique<RuntimeInternalProducer>(
-            this, *binding_index, m_start_generation, binding.id,
-            binding.variable_name);
+            this, m_internal_producer_open_state, m_producer_tokens[*binding_index],
+            m_start_generation, binding.id, binding.variable_name);
+    open_generation = m_start_generation;
     return std::move(producer);
   }
 
@@ -201,11 +213,76 @@ class DataHubRuntime final : public IDataHubRuntime {
     return m_scheduler_active;
   }
 
+  std::expected<void, SubmitError> submitFromProducer(
+      ProducerToken token, RuntimeUpdateRequest req) override {
+    std::scoped_lock lock(m_lifecycle_mtx);
+
+    auto binding_result = findBindingForTokenLocked(token);
+    if (!binding_result.has_value()) {
+      return std::unexpected(binding_result.error());
+    }
+
+    const auto* compiled_definition =
+        m_store.catalog().findByIndex(token.variable_index);
+    auto* entry = m_store.findEntryByIndex(token.variable_index);
+    if (compiled_definition == nullptr || entry == nullptr) {
+      return std::unexpected(SubmitError{
+          SubmitErrorCode::OwnershipViolation,
+          "producer token references an unknown runtime variable"});
+    }
+
+    if (!isValueCompatible(req.value,
+                           compiled_definition->public_definition.data_type)) {
+      return std::unexpected(SubmitError{
+          SubmitErrorCode::InvalidType,
+          "update value is incompatible with variable data_type"});
+    }
+
+    std::unique_lock<std::shared_mutex> entry_lock(entry->mtx);
+    entry->value = std::move(req.value);
+    entry->raw_quality = req.quality;
+    entry->source_timestamp = std::move(req.source_timestamp);
+    entry->hub_timestamp = std::chrono::system_clock::now();
+    ++entry->version;
+    entry->initialized = true;
+    entry->last_update_steady = std::chrono::steady_clock::now();
+    return {};
+  }
+
+  void markProducerConnectionBad(ProducerToken token,
+                                 std::string_view reason) override {
+    (void)reason;
+
+    std::scoped_lock lock(m_lifecycle_mtx);
+    auto binding_result = findBindingForTokenLocked(token);
+    if (!binding_result.has_value()) {
+      return;
+    }
+
+    auto* entry = m_store.findEntryByIndex(token.variable_index);
+    if (entry == nullptr) {
+      return;
+    }
+
+    std::unique_lock<std::shared_mutex> entry_lock(entry->mtx);
+    entry->raw_quality = Quality::Bad;
+    entry->hub_timestamp = std::chrono::system_clock::now();
+    ++entry->version;
+    entry->last_update_steady = std::chrono::steady_clock::now();
+  }
+
  private:
   struct ConnectorRuntimeSlot {
     std::string connector_id;
     std::string kind;
     bool enabled{true};
+  };
+
+  struct InternalProducerOpenState {
+    // Open/close of internal producer handles is serialized here so
+    // `AlreadyOpen` and handle destruction cannot race each other.
+    std::mutex mtx;
+    std::vector<std::optional<std::uint64_t>> open_generations;
   };
 
   class RuntimeHub final : public IDataHub {
@@ -239,14 +316,21 @@ class DataHubRuntime final : public IDataHubRuntime {
 
   class RuntimeInternalProducer final : public IInternalProducer {
    public:
-    RuntimeInternalProducer(DataHubRuntime* runtime, std::size_t binding_index,
-                            std::uint64_t generation, std::string binding_id,
-                            std::string variable_name)
+    RuntimeInternalProducer(
+        DataHubRuntime* runtime,
+        std::shared_ptr<InternalProducerOpenState> open_state, ProducerToken token,
+        std::uint64_t generation, std::string binding_id,
+        std::string variable_name)
         : m_runtime(runtime),
-          m_binding_index(binding_index),
+          m_open_state(std::move(open_state)),
+          m_token(token),
           m_generation(generation),
           m_binding_id(std::move(binding_id)),
           m_variable_name(std::move(variable_name)) {}
+
+    ~RuntimeInternalProducer() override {
+      releaseInternalProducer(m_open_state, m_token.binding_index, m_generation);
+    }
 
     std::string_view bindingId() const noexcept override { return m_binding_id; }
 
@@ -255,22 +339,31 @@ class DataHubRuntime final : public IDataHubRuntime {
     }
 
     std::expected<void, SubmitError> submit(UpdateRequest req) override {
-      return m_runtime->submitFromInternalProducer(m_binding_index, m_generation,
-                                                  std::move(req));
+      RuntimeUpdateRequest runtime_request;
+      runtime_request.value = std::move(req.value);
+      runtime_request.quality = req.quality;
+      runtime_request.source_timestamp = std::move(req.source_timestamp);
+      return m_runtime->submitFromInternalProducerHandle(
+          m_generation, m_token, std::move(runtime_request));
     }
 
    private:
     DataHubRuntime* m_runtime;
-    std::size_t m_binding_index;
+    std::shared_ptr<InternalProducerOpenState> m_open_state;
+    ProducerToken m_token;
     std::uint64_t m_generation;
     std::string m_binding_id;
     std::string m_variable_name;
   };
 
-  DataHubRuntime(LoadedDatahubConfig config, core::StateStore store)
+  DataHubRuntime(LoadedDatahubConfig config, core::StateStore store,
+                 std::vector<ProducerToken> producer_tokens,
+                 std::shared_ptr<InternalProducerOpenState> open_state)
       : m_config(std::move(config)),
         m_store(std::move(store)),
-        m_hub(&m_store) {}
+        m_hub(&m_store),
+        m_producer_tokens(std::move(producer_tokens)),
+        m_internal_producer_open_state(std::move(open_state)) {}
 
   static std::expected<std::unique_ptr<DataHubRuntime>, RuntimeError> create(
       LoadedDatahubConfig config) {
@@ -282,13 +375,44 @@ class DataHubRuntime final : public IDataHubRuntime {
     }
 
     auto store = core::StateStore::bootstrap(std::move(*catalog));
+    auto producer_tokens = buildProducerTokens(config, store);
+    if (!producer_tokens.has_value()) {
+      return std::unexpected(producer_tokens.error());
+    }
+
+    auto open_state = std::make_shared<InternalProducerOpenState>();
+    open_state->open_generations.resize(config.producer_bindings.size());
+
     return std::unique_ptr<DataHubRuntime>(
-        new DataHubRuntime(std::move(config), std::move(store)));
+        new DataHubRuntime(std::move(config), std::move(store),
+                           std::move(*producer_tokens), std::move(open_state)));
   }
 
-  std::expected<void, SubmitError> submitFromInternalProducer(
-      std::size_t binding_index, std::uint64_t generation, UpdateRequest req) {
-    const ProducerBindingConfig* binding = nullptr;
+  static std::expected<std::vector<ProducerToken>, RuntimeError>
+  buildProducerTokens(const LoadedDatahubConfig& config,
+                      const core::StateStore& store) {
+    std::vector<ProducerToken> tokens;
+    tokens.reserve(config.producer_bindings.size());
+
+    for (std::size_t i = 0; i < config.producer_bindings.size(); ++i) {
+      const auto& binding = config.producer_bindings[i];
+      const auto variable_index =
+          store.catalog().findIndexByName(binding.variable_name);
+      if (!variable_index.has_value()) {
+        return std::unexpected(RuntimeError{
+            RuntimeErrorCode::BootstrapFailed,
+            "producer binding references an unknown compiled variable: " +
+                binding.variable_name});
+      }
+
+      tokens.push_back(ProducerToken{i, *variable_index});
+    }
+
+    return tokens;
+  }
+
+  std::expected<void, SubmitError> submitFromInternalProducerHandle(
+      std::uint64_t generation, ProducerToken token, RuntimeUpdateRequest req) {
     {
       std::scoped_lock lock(m_lifecycle_mtx);
 
@@ -297,54 +421,71 @@ class DataHubRuntime final : public IDataHubRuntime {
             SubmitErrorCode::RuntimeStopped,
             "runtime generation is no longer active"});
       }
-
-      if (binding_index >= m_config.producer_bindings.size()) {
-        return std::unexpected(SubmitError{
-            SubmitErrorCode::OwnershipViolation,
-            "internal producer binding index is invalid"});
-      }
-
-      binding = &m_config.producer_bindings[binding_index];
-      if (!binding->enabled) {
-        return std::unexpected(SubmitError{
-            SubmitErrorCode::BindingDisabled,
-            "binding is disabled: " + binding->id});
-      }
-
-      if (binding->producer_kind != ProducerKind::Internal) {
-        return std::unexpected(SubmitError{
-            SubmitErrorCode::OwnershipViolation,
-            "binding is not configured as an internal producer: " +
-                binding->id});
-      }
     }
 
-    const auto* compiled_definition = m_store.catalog().findByName(
-        binding->variable_name);
-    auto* entry = m_store.findEntryByName(binding->variable_name);
-    if (compiled_definition == nullptr || entry == nullptr) {
+    if (token.binding_index >= m_config.producer_bindings.size()) {
       return std::unexpected(SubmitError{
           SubmitErrorCode::OwnershipViolation,
-          "binding references an unknown runtime variable: " +
-              binding->variable_name});
+          "internal producer binding index is invalid"});
     }
 
-    if (!isValueCompatible(req.value,
-                           compiled_definition->public_definition.data_type)) {
+    const auto& binding = m_config.producer_bindings[token.binding_index];
+    if (binding.producer_kind != ProducerKind::Internal) {
       return std::unexpected(SubmitError{
-          SubmitErrorCode::InvalidType,
-          "update value is incompatible with variable data_type"});
+          SubmitErrorCode::OwnershipViolation,
+          "binding is not configured as an internal producer: " + binding.id});
     }
 
-    std::unique_lock<std::shared_mutex> entry_lock(entry->mtx);
-    entry->value = std::move(req.value);
-    entry->raw_quality = req.quality;
-    entry->source_timestamp = std::move(req.source_timestamp);
-    entry->hub_timestamp = std::chrono::system_clock::now();
-    ++entry->version;
-    entry->initialized = true;
-    entry->last_update_steady = std::chrono::steady_clock::now();
-    return {};
+    return submitFromProducer(token, std::move(req));
+  }
+
+  static void releaseInternalProducer(
+      const std::shared_ptr<InternalProducerOpenState>& open_state,
+      std::size_t binding_index, std::uint64_t generation) noexcept {
+    if (open_state == nullptr) {
+      return;
+    }
+
+    std::scoped_lock lock(open_state->mtx);
+    if (binding_index >= open_state->open_generations.size()) {
+      return;
+    }
+
+    auto& open_generation = open_state->open_generations[binding_index];
+    if (open_generation == generation) {
+      open_generation.reset();
+    }
+  }
+
+  std::expected<const ProducerBindingConfig*, SubmitError> findBindingForTokenLocked(
+      ProducerToken token) const {
+    if (!m_started) {
+      return std::unexpected(SubmitError{
+          SubmitErrorCode::RuntimeStopped, "runtime is not started"});
+    }
+
+    if (token.binding_index >= m_config.producer_bindings.size() ||
+        token.binding_index >= m_producer_tokens.size()) {
+      return std::unexpected(SubmitError{
+          SubmitErrorCode::OwnershipViolation,
+          "producer token references an invalid binding index"});
+    }
+
+    const auto& expected_token = m_producer_tokens[token.binding_index];
+    if (expected_token.variable_index != token.variable_index) {
+      return std::unexpected(SubmitError{
+          SubmitErrorCode::OwnershipViolation,
+          "producer token does not own the configured variable"});
+    }
+
+    const auto& binding = m_config.producer_bindings[token.binding_index];
+    if (!binding.enabled) {
+      return std::unexpected(SubmitError{
+          SubmitErrorCode::BindingDisabled,
+          "binding is disabled: " + binding.id});
+    }
+
+    return &binding;
   }
 
   std::optional<std::size_t> findProducerBindingIndex(
@@ -416,6 +557,8 @@ class DataHubRuntime final : public IDataHubRuntime {
   LoadedDatahubConfig m_config;
   core::StateStore m_store;
   RuntimeHub m_hub;
+  std::vector<ProducerToken> m_producer_tokens;
+  std::shared_ptr<InternalProducerOpenState> m_internal_producer_open_state;
   bool m_started{false};
   bool m_ever_started{false};
   std::uint64_t m_start_generation{0};
