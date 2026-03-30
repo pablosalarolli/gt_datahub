@@ -47,8 +47,8 @@ Este checklist foi derivado do roadmap `datahub_roadmap_v3_7_2.md` e serve como 
 - [x] `raw_quality` vs `quality` efetiva
 - [x] stale lazy baseado em `steady_clock`
 - [x] `system_clock` exposto publicamente apenas para timestamps reais
-- [ ] `openInternalProducer()` e liberação de `AlreadyOpen`
-- [ ] `on_change` = atualização aceita / incremento de `version`
+- [x] `openInternalProducer()` e liberação de `AlreadyOpen`
+- [x] `on_change` = atualização aceita / incremento de `version`
 - [ ] `resolveText()` estruturalmente inválido retorna erro
 - [ ] `target_template` e `path_template` têm semânticas diferentes para valor ausente
 - [ ] fila/serialização por `export_id` em `triggerFileExport()`
