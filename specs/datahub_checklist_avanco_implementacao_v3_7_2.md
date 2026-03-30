@@ -110,17 +110,17 @@ Este checklist foi derivado do roadmap `datahub_roadmap_v3_7_2.md` e serve como 
 
 ### Sprint 1.2 — `Value`, definições e estado
 #### Implementação
-- [ ] Implementar `Value` com `std::variant`
-- [ ] Implementar `VariableDefinition`
-- [ ] Implementar `VariableState`
-- [ ] Implementar `UpdateRequest`
+- [x] Implementar `Value` com `std::variant`
+- [x] Implementar `VariableDefinition`
+- [x] Implementar `VariableState`
+- [x] Implementar `UpdateRequest`
 
 #### Testes
-- [ ] UT: round-trip de armazenamento/extração por tipo
-- [ ] UT: acesso errado falha de forma limpa
-- [ ] UT: `VariableDefinition.default_value` aceita tipos compatíveis
-- [ ] RT: cópia/movimentação de `Value`
-- [ ] ST: exemplo mínimo com definição e estado
+- [x] UT: round-trip de armazenamento/extração por tipo
+- [x] UT: acesso errado falha de forma limpa
+- [x] UT: `VariableDefinition.default_value` aceita tipos compatíveis
+- [x] RT: cópia/movimentação de `Value`
+- [x] ST: exemplo mínimo com definição e estado
 
 ### Sprint 1.3 — Interfaces públicas
 #### Implementação

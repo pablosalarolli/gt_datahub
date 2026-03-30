@@ -16,6 +16,15 @@ add_executable(unit_tests
                gt_datahub/variable_role_header_test.cpp
                gt_datahub/timestamp_header_test.cpp
                gt_datahub/errors_header_test.cpp
+               gt_datahub/value_test.cpp
+               gt_datahub/variable_definition_test.cpp
+               gt_datahub/variable_state_test.cpp
+               gt_datahub/update_request_test.cpp
+               gt_datahub/public_model_smoke_test.cpp
+               gt_datahub/value_header_test.cpp
+               gt_datahub/variable_definition_header_test.cpp
+               gt_datahub/variable_state_header_test.cpp
+               gt_datahub/update_request_header_test.cpp
 )
 
 target_include_directories(unit_tests BEFORE

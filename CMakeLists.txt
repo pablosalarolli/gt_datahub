@@ -25,6 +25,10 @@ set(GTDATAHUB_HEADER_FILES
     include/gt_datahub/data_type.hpp
     include/gt_datahub/quality.hpp
     include/gt_datahub/variable_role.hpp
+    include/gt_datahub/value.hpp
+    include/gt_datahub/variable_definition.hpp
+    include/gt_datahub/variable_state.hpp
+    include/gt_datahub/update_request.hpp
     include/gt_datahub/errors.hpp
 )
 
