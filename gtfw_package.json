@@ -1,0 +1,16 @@
+{
+    "packageName": "gt_datahub",
+    "version": "0.1.0",
+    "description": "Pacote com hub de dados para múltiplas interfaces.",
+    "languages": ["CXX"],
+    "CMakeCXXStandard": "23",
+    "CreatePkgInfoHeader": true,
+    "CreateVisibilityControlHeader": ["gt_datahub"],
+    "AutoUpdateCMakePresets": true,
+    "AutoInstallIncludeDir": true,
+    "docs": {
+        "authors": "Pablo Salarolli",
+        "sphinx_theme": "sphinx_book_theme",
+        "project_start_date": "27/03/2026"
+    }
+}

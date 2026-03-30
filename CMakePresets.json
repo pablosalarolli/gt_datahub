@@ -1,0 +1,207 @@
+{
+    "version": 8,
+    "cmakeMinimumRequired": {
+        "major": 3,
+        "minor": 28,
+        "patch": 0
+    },
+    "configurePresets": [
+        {
+            "name": "windows-base",
+            "hidden": true,
+            "generator": "Ninja Multi-Config",
+            "description": "Base configure preset for Windows x64",
+            "binaryDir": "$env{GTFW_ROOT}/build/${sourceDirName}",
+            "installDir": "$env{GTFW_ROOT}/install/${sourceDirName}",
+            "architecture": {
+                "value": "x64",
+                "strategy": "external"
+            },
+            "environment": {
+                "CMAKE_CONFIGURATION_TYPES": "Release;Debug;RelWithDebInfo",
+                "LIB": "C:/Program Files (x86)/Windows Kits/10/Lib/10.0.26100.0/um/x64;C:/Program Files (x86)/Windows Kits/10/Lib/10.0.26100.0/ucrt/x64;C:/Program Files/Microsoft Visual Studio/2022/Community/VC/Tools/MSVC/14.44.35207/lib/x64;$penv{LIB}"
+            },
+            "cacheVariables": {
+                "CMAKE_C_COMPILER": "clang-cl",
+                "CMAKE_CXX_COMPILER": "clang-cl",
+                "CMAKE_SYSTEM_VERSION": "10.0",
+                "CMAKE_TOOLCHAIN_FILE": {
+                    "value": "$env{VCPKG_ROOT}/scripts/buildsystems/vcpkg.cmake",
+                    "type": "FILEPATH"
+                },
+                "CMAKE_DEBUG_POSTFIX": "d",
+                "CMAKE_RELWITHDEBINFO_POSTFIX": "rd",
+                "CMAKE_INSTALL_PREFIX": "$env{GTFW_ROOT}/install",
+                "CMAKE_PREFIX_PATH": "$env{GTFW_ROOT}/install",
+                "BUILD_TESTING": {
+                    "type": "BOOL",
+                    "value": "FALSE"
+                },
+                "BUILD_DOCS": {
+                    "type": "BOOL",
+                    "value": "FALSE"
+                },
+                "BUILD_EXAMPLES": {
+                    "type": "BOOL",
+                    "value": "FALSE"
+                }
+            },
+            "condition": {
+                "type": "equals",
+                "lhs": "${hostSystemName}",
+                "rhs": "Windows"
+            },
+            "vendor": {
+              "microsoft.com/VisualStudioSettings/CMake/1.0": {
+                "hostOS": [ "Windows" ],
+                "intelliSenseMode": "windows-clang-x64"
+              }
+            }
+        },
+        {
+            "name": "x64-Debug",
+            "displayName": "x64 Debug",
+            "description": "Windows x64 Debug mode - No tests, examples neither docs included in ALL.",
+            "inherits": "windows-base",
+            "cacheVariables": {
+                "CMAKE_BUILD_TYPE": "Debug"
+            }
+        },
+        {
+            "name": "x64-Release",
+            "displayName": "x64 Release",
+            "description": "Windows x64 Release mode - No tests, examples neither docs in ALL.",
+            "inherits": "windows-base",
+            "cacheVariables": {
+                "CMAKE_BUILD_TYPE": "Release"
+            }
+        },
+        {
+            "name": "x64-RelWithDebInfo",
+            "displayName": "x64 RelWithDebInfo",
+            "description": "Windows x64 Release mode with debug Info - No tests, examples neither docs in ALL.",
+            "inherits": "windows-base",
+            "cacheVariables": {
+                "CMAKE_BUILD_TYPE": "RelWithDebInfo"
+            }
+        },
+        {
+            "name": "x64-Debug-CI",
+            "displayName": "x64 Debug CI",
+            "description": "Windows x64 Debug mode for CI.",
+            "inherits": "windows-base",
+            "cacheVariables": {
+                "CMAKE_BUILD_TYPE": "Debug",
+                "BUILD_TESTING": {
+                    "type": "BOOL",
+                    "value": "TRUE"
+                },
+                "BUILD_DOCS": {
+                    "type": "BOOL",
+                    "value": "TRUE"
+                },
+                "BUILD_EXAMPLES": {
+                    "type": "BOOL",
+                    "value": "TRUE"
+                }
+            }
+        },
+        {
+            "name": "x64-Release-CI",
+            "displayName": "x64 Release CI",
+            "description": "Windows x64 Release mode for CI.",
+            "inherits": "windows-base",
+            "cacheVariables": {
+                "CMAKE_BUILD_TYPE": "Release",
+                "BUILD_TESTING": {
+                    "type": "BOOL",
+                    "value": "TRUE"
+                },
+                "BUILD_DOCS": {
+                    "type": "BOOL",
+                    "value": "TRUE"
+                },
+                "BUILD_EXAMPLES": {
+                    "type": "BOOL",
+                    "value": "TRUE"
+                }
+            }
+        },
+        {
+            "name": "x64-RelWithDebInfo-CI",
+            "displayName": "x64 RelWithDebInfo CI",
+            "description": "Windows x64 Release mode with debug Info for CI.",
+            "inherits": "windows-base",
+            "cacheVariables": {
+                "CMAKE_BUILD_TYPE": "RelWithDebInfo",
+                "BUILD_TESTING": {
+                    "type": "BOOL",
+                    "value": "TRUE"
+                },
+                "BUILD_DOCS": {
+                    "type": "BOOL",
+                    "value": "TRUE"
+                },
+                "BUILD_EXAMPLES": {
+                    "type": "BOOL",
+                    "value": "TRUE"
+                }
+            }
+        }
+    ],
+    "buildPresets": [
+        {
+            "name": "Debug",
+            "configurePreset": "x64-Debug",
+            "configuration": "Debug"
+        },
+        {
+            "name": "Release",
+            "configurePreset": "x64-Release",
+            "configuration": "Release"
+        },
+        {
+            "name": "RelWithDebInfo",
+            "configurePreset": "x64-RelWithDebInfo",
+            "configuration": "RelWithDebInfo"
+        },
+        {
+            "name": "Debug-CI",
+            "configurePreset": "x64-Debug-CI",
+            "configuration": "Debug"
+        },
+        {
+            "name": "Release-CI",
+            "configurePreset": "x64-Release-CI",
+            "configuration": "Release"
+        },
+        {
+            "name": "RelWithDebInfo-CI",
+            "configurePreset": "x64-RelWithDebInfo-CI",
+            "configuration": "RelWithDebInfo"
+        }        
+    ],
+    "testPresets": [
+        {
+            "name": "TestDebug",
+            "configurePreset": "x64-Debug-CI",
+            "output": {"outputOnFailure": true},
+            "execution": {"noTestsAction": "error", "stopOnFailure": true},
+            "configuration": "Debug"
+        },
+        {
+            "name": "TestRelease",
+            "configurePreset": "x64-Release-CI",
+            "output": {"outputOnFailure": true},
+            "execution": {"noTestsAction": "error", "stopOnFailure": true},
+            "configuration": "Release"
+        },
+        {
+            "name": "TestRelWithDebInfo",
+            "configurePreset": "x64-RelWithDebInfo-CI",
+            "output": {"outputOnFailure": true},
+            "execution": {"noTestsAction": "error", "stopOnFailure": true},
+            "configuration": "RelWithDebInfo"
+        }
+    ]
+}
