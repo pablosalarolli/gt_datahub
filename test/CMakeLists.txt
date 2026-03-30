@@ -12,6 +12,7 @@ add_executable(unit_tests
                main_test.cpp
                core/compiled_catalog_test.cpp
                core/state_store_test.cpp
+               core/state_store_quality_test.cpp
                gt_datahub/public_types_test.cpp
                gt_datahub/data_type_header_test.cpp
                gt_datahub/quality_header_test.cpp

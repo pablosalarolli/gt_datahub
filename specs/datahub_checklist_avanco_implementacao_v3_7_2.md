@@ -16,7 +16,7 @@ Este checklist foi derivado do roadmap `datahub_roadmap_v3_7_2.md` e serve como 
 
 - [x] Fase 0 — Congelamento da baseline e governança
 - [x] Fase 1 — API pública e tipos centrais
-- [~] Fase 2 — Catálogo, store e bootstrap de estado
+- [x] Fase 2 — Catálogo, store e bootstrap de estado
 - [ ] Fase 3 — YAML compiler e validação
 - [ ] Fase 4 — Runtime, ownership e lifecycle
 - [ ] Fase 5 — Seletores, `resolveText()` e predicados
@@ -172,19 +172,19 @@ Este checklist foi derivado do roadmap `datahub_roadmap_v3_7_2.md` e serve como 
 
 ### Sprint 2.3 — Qualidade efetiva e stale lazy
 #### Implementação
-- [ ] Implementar `raw_quality` interno
-- [ ] Implementar avaliação lazy de stale
-- [ ] Garantir regra `Bad` vence `Stale`
+- [x] Implementar `raw_quality` interno
+- [x] Implementar avaliação lazy de stale
+- [x] Garantir regra `Bad` vence `Stale`
 
 #### Testes
-- [ ] UT: variável sem stale configurado não envelhece
-- [ ] UT: stale é derivado em leitura, não por thread de varredura
-- [ ] UT: `Bad` prevalece sobre `Stale`
-- [ ] ST: leitura de qualidade efetiva ponta a ponta
+- [x] UT: variável sem stale configurado não envelhece
+- [x] UT: stale é derivado em leitura, não por thread de varredura
+- [x] UT: `Bad` prevalece sobre `Stale`
+- [x] ST: leitura de qualidade efetiva ponta a ponta
 
 ### Critério de saída da fase
-- [ ] Catálogo e store funcionam corretamente
-- [ ] `getState()` já reflete a semântica pública da baseline
+- [x] Catálogo e store funcionam corretamente
+- [x] `getState()` já reflete a semântica pública da baseline
 
 ---
 

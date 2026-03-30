@@ -103,8 +103,26 @@ class StateStore {
    */
   std::optional<VariableState> getState(
       std::string_view variable_name) const noexcept {
+    return getStateAt(variable_name, std::chrono::steady_clock::now());
+  }
+
+  /**
+   * Returns the public state snapshot for `variable_name` using an explicit
+   * monotonic reference time.
+   *
+   * This overload keeps stale evaluation deterministic for internal runtime
+   * code and tests without exposing `steady_clock` through the public API.
+   */
+  std::optional<VariableState> getStateAt(
+      std::string_view variable_name,
+      std::chrono::steady_clock::time_point now) const noexcept {
     const auto index = m_catalog.findIndexByName(variable_name);
     if (!index.has_value()) {
+      return std::nullopt;
+    }
+
+    const auto* definition = m_catalog.findByIndex(*index);
+    if (definition == nullptr) {
       return std::nullopt;
     }
 
@@ -113,7 +131,8 @@ class StateStore {
 
     VariableState state;
     state.value = entry.value;
-    state.quality = entry.raw_quality;
+    state.quality =
+        effectiveQualityAt(entry, definition->public_definition, now);
     state.source_timestamp = entry.source_timestamp;
     state.hub_timestamp = entry.hub_timestamp;
     state.version = entry.version;
@@ -171,7 +190,39 @@ class StateStore {
     return &m_entries[*index];
   }
 
+  /**
+   * Returns a mutable internal entry by name for runtime code and internal
+   * tests that need to simulate updates between bootstrap and full runtime.
+   */
+  VariableStateEntry* findEntryByName(std::string_view variable_name) noexcept {
+    const auto index = m_catalog.findIndexByName(variable_name);
+    if (!index.has_value()) {
+      return nullptr;
+    }
+
+    return &m_entries[*index];
+  }
+
  private:
+  static Quality effectiveQualityAt(
+      const VariableStateEntry& entry, const VariableDefinition& definition,
+      std::chrono::steady_clock::time_point now) noexcept {
+    if (entry.raw_quality == Quality::Bad) {
+      return Quality::Bad;
+    }
+
+    if (!definition.stale_after_ms.has_value() ||
+        !entry.last_update_steady.has_value()) {
+      return entry.raw_quality;
+    }
+
+    if (now - *entry.last_update_steady > *definition.stale_after_ms) {
+      return Quality::Stale;
+    }
+
+    return entry.raw_quality;
+  }
+
   StateStore(CompiledCatalog catalog, std::vector<VariableStateEntry> entries)
       : m_catalog(std::move(catalog)), m_entries(std::move(entries)) {}
 
