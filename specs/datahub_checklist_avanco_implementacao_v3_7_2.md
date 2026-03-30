@@ -31,28 +31,28 @@ Este checklist foi derivado do roadmap `datahub_roadmap_v3_7_2.md` e serve como 
 ## Checklist transversal — documentação de código
 
 ### Regra geral
-- [ ] Toda API pública nova sai com docstring mínima no mesmo merge em que for introduzida
+- [x] Toda API pública nova sai com docstring mínima no mesmo merge em que for introduzida
 - [ ] Toda API pública alterada tem docstring revisada no mesmo merge em que for modificada
 - [ ] Comentários obsoletos que contrariem a baseline vigente são removidos
-- [ ] Decisões não óbvias são registradas com comentário curto no código ou nota em `docs/`
+- [x] Decisões não óbvias são registradas com comentário curto no código ou nota em `docs/`
 
 ### Docstrings obrigatórias
-- [ ] Classes/structs públicas novas estão documentadas
-- [ ] Interfaces como `IDataHub`, `IDataHubRuntime` e `IInternalProducer` estão documentadas
-- [ ] Funções com contrato sensível estão documentadas
-- [ ] Enums e políticas com impacto comportamental estão documentados
-- [ ] Ownership/lifecycle e comportamento deferido estão descritos onde aplicável
+- [x] Classes/structs públicas novas estão documentadas
+- [x] Interfaces como `IDataHub`, `IDataHubRuntime` e `IInternalProducer` estão documentadas
+- [x] Funções com contrato sensível estão documentadas
+- [x] Enums e políticas com impacto comportamental estão documentados
+- [x] Ownership/lifecycle e comportamento deferido estão descritos onde aplicável
 
 ### Gotchas que devem ter comentário explícito no código
-- [ ] `raw_quality` vs `quality` efetiva
-- [ ] stale lazy baseado em `steady_clock`
-- [ ] `system_clock` exposto publicamente apenas para timestamps reais
+- [x] `raw_quality` vs `quality` efetiva
+- [x] stale lazy baseado em `steady_clock`
+- [x] `system_clock` exposto publicamente apenas para timestamps reais
 - [ ] `openInternalProducer()` e liberação de `AlreadyOpen`
 - [ ] `on_change` = atualização aceita / incremento de `version`
 - [ ] `resolveText()` estruturalmente inválido retorna erro
 - [ ] `target_template` e `path_template` têm semânticas diferentes para valor ausente
 - [ ] fila/serialização por `export_id` em `triggerFileExport()`
-- [ ] movimento de `UpdateRequest` / `Value` no hot path
+- [x] movimento de `UpdateRequest` / `Value` no hot path
 
 ### Documentação auxiliar em Markdown
 - [ ] Criar `docs/bootstrap-and-validation.md`
