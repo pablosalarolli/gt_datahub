@@ -101,6 +101,7 @@ class DataHubRuntime final : public IDataHubRuntime, public IRuntimeHubAccess {
     m_scheduler_active = false;
     m_connector_runtimes.clear();
     m_on_change_dispatcher.clear();
+    resetFileExportStatesOnStop();
     for (auto& binding_generation :
          m_internal_producer_open_state->open_generations) {
       binding_generation.reset();
@@ -168,27 +169,29 @@ class DataHubRuntime final : public IDataHubRuntime, public IRuntimeHubAccess {
           TriggerErrorCode::RuntimeStopped, "runtime is not started"});
     }
 
-    const FileExportConfig* export_config = findFileExport(export_id);
-    if (export_config == nullptr) {
+    const auto export_index = findFileExportIndex(export_id);
+    if (!export_index.has_value()) {
       return std::unexpected(TriggerError{
           TriggerErrorCode::UnknownExport,
           "unknown file export: " + std::string(export_id)});
     }
 
-    if (!export_config->enabled) {
+    const auto& export_config = m_config.file_exports[*export_index];
+    if (!export_config.enabled) {
       return std::unexpected(TriggerError{
           TriggerErrorCode::ExportDisabled,
-          "file export is disabled: " + export_config->id});
+          "file export is disabled: " + export_config.id});
     }
 
-    if (export_config->trigger.mode != "manual") {
+    if (export_config.trigger.mode != "manual") {
       return std::unexpected(TriggerError{
           TriggerErrorCode::InvalidTriggerMode,
           "file export is not configured for manual trigger: " +
-              export_config->id});
+              export_config.id});
     }
 
-    return {};
+    return triggerManualFileExportLocked(*export_index,
+                                         std::chrono::system_clock::now());
   }
 
   /**
@@ -241,6 +244,66 @@ class DataHubRuntime final : public IDataHubRuntime, public IRuntimeHubAccess {
   std::vector<OnChangeNotification> drainOnChangeNotificationsForTesting(
       std::string_view binding_id) {
     return m_on_change_dispatcher.drainAll(binding_id);
+  }
+
+  /**
+   * Executes one synthetic periodic scheduler tick for internal tests.
+   */
+  void runPeriodicExportTickForTesting() {
+    std::scoped_lock lock(m_lifecycle_mtx);
+    if (!m_started) {
+      return;
+    }
+
+    runPeriodicExportsLocked(std::chrono::system_clock::now());
+  }
+
+  /**
+   * Returns how many export attempts were accepted for one configured export.
+   *
+   * Internal test hook until real file sinks own the write path.
+   */
+  std::size_t acceptedFileExportAttemptCount(
+      std::string_view export_id) const noexcept {
+    std::scoped_lock lock(m_lifecycle_mtx);
+    const auto export_index = findFileExportIndex(export_id);
+    if (!export_index.has_value() ||
+        *export_index >= m_file_export_states.size()) {
+      return 0;
+    }
+
+    return m_file_export_states[*export_index].accepted_attempt_count;
+  }
+
+  /**
+   * Returns whether one export currently has an open logical session.
+   *
+   * Internal test hook until real file sinks materialize session handles.
+   */
+  bool fileExportSessionOpen(std::string_view export_id) const noexcept {
+    std::scoped_lock lock(m_lifecycle_mtx);
+    const auto export_index = findFileExportIndex(export_id);
+    if (!export_index.has_value() ||
+        *export_index >= m_file_export_states.size()) {
+      return false;
+    }
+
+    return m_file_export_states[*export_index].session_open;
+  }
+
+  /**
+   * Returns the current logical export session id, when one is open.
+   */
+  std::optional<std::uint64_t> currentFileExportSessionId(
+      std::string_view export_id) const noexcept {
+    std::scoped_lock lock(m_lifecycle_mtx);
+    const auto export_index = findFileExportIndex(export_id);
+    if (!export_index.has_value() ||
+        *export_index >= m_file_export_states.size()) {
+      return std::nullopt;
+    }
+
+    return m_file_export_states[*export_index].current_session_id;
   }
 
   std::expected<void, SubmitError> submitFromProducer(
@@ -321,6 +384,16 @@ class DataHubRuntime final : public IDataHubRuntime, public IRuntimeHubAccess {
     // `AlreadyOpen` and handle destruction cannot race each other.
     std::mutex mtx;
     std::vector<std::optional<std::uint64_t>> open_generations;
+  };
+
+  struct FileExportRuntimeState {
+    bool last_activation_result{false};
+    bool session_open{false};
+    std::uint64_t issued_session_count{0};
+    std::optional<std::uint64_t> current_session_id;
+    std::optional<std::string> current_target_path;
+    std::optional<Timestamp> session_started_at;
+    std::uint64_t accepted_attempt_count{0};
   };
 
   class RuntimeHub final : public IDataHub {
@@ -404,7 +477,9 @@ class DataHubRuntime final : public IDataHubRuntime, public IRuntimeHubAccess {
         m_hub(&m_store),
         m_producer_tokens(std::move(producer_tokens)),
         m_internal_producer_open_state(std::move(open_state)),
-        m_on_change_dispatcher(std::move(on_change_dispatcher)) {}
+        m_on_change_dispatcher(std::move(on_change_dispatcher)) {
+    m_file_export_states.resize(m_config.file_exports.size());
+  }
 
   static std::expected<std::unique_ptr<DataHubRuntime>, RuntimeError> create(
       LoadedDatahubConfig config) {
@@ -554,15 +629,128 @@ class DataHubRuntime final : public IDataHubRuntime, public IRuntimeHubAccess {
     return std::nullopt;
   }
 
-  const FileExportConfig* findFileExport(
+  std::optional<std::size_t> findFileExportIndex(
       std::string_view export_id) const noexcept {
-    for (const auto& export_config : m_config.file_exports) {
-      if (export_config.id == export_id) {
-        return &export_config;
+    for (std::size_t i = 0; i < m_config.file_exports.size(); ++i) {
+      if (m_config.file_exports[i].id == export_id) {
+        return i;
       }
     }
 
-    return nullptr;
+    return std::nullopt;
+  }
+
+  std::expected<void, TriggerError> triggerManualFileExportLocked(
+      std::size_t export_index, Timestamp now) {
+    auto& export_state = m_file_export_states[export_index];
+    const auto& export_config = m_config.file_exports[export_index];
+
+    if (!evaluateExportActivationLocked(export_config, export_state, "manual",
+                                        now)) {
+      return std::unexpected(TriggerError{
+          TriggerErrorCode::ActivationInactive,
+          "file export activation is inactive: " + export_config.id});
+    }
+
+    ensureFileExportSessionOpenLocked(export_config, export_state, "manual",
+                                      now);
+    ++export_state.accepted_attempt_count;
+    return {};
+  }
+
+  void runPeriodicExportsLocked(Timestamp now) {
+    for (std::size_t i = 0; i < m_config.file_exports.size(); ++i) {
+      const auto& export_config = m_config.file_exports[i];
+      if (!export_config.enabled || export_config.trigger.mode != "periodic") {
+        continue;
+      }
+
+      auto& export_state = m_file_export_states[i];
+      if (!evaluateExportActivationLocked(export_config, export_state,
+                                          "periodic", now)) {
+        continue;
+      }
+
+      ensureFileExportSessionOpenLocked(export_config, export_state, "periodic",
+                                        now);
+      ++export_state.accepted_attempt_count;
+    }
+  }
+
+  bool evaluateExportActivationLocked(const FileExportConfig& export_config,
+                                      FileExportRuntimeState& export_state,
+                                      std::string_view trigger_mode,
+                                      Timestamp now) {
+    core::EvalContext context{m_hub};
+    context.export_id = export_config.id;
+    context.export_session_id = export_state.current_session_id;
+    context.trigger_mode = std::string(trigger_mode);
+    context.target_path = export_state.current_target_path;
+    context.session_started_at = export_state.session_started_at;
+    context.export_captured_at = now;
+    context.system_now = now;
+
+    const bool active = export_config.compiled_activation == nullptr
+                            ? true
+                            : export_config.compiled_activation->evaluate(context);
+
+    if (!active && export_state.last_activation_result &&
+        export_config.finalize_on_stop) {
+      closeFileExportSessionLocked(export_state);
+    }
+
+    export_state.last_activation_result = active;
+    return active;
+  }
+
+  void ensureFileExportSessionOpenLocked(const FileExportConfig& export_config,
+                                         FileExportRuntimeState& export_state,
+                                         std::string_view trigger_mode,
+                                         Timestamp now) {
+    if (export_state.session_open) {
+      return;
+    }
+
+    ++export_state.issued_session_count;
+    export_state.current_session_id = export_state.issued_session_count;
+    export_state.session_started_at = now;
+
+    core::TextResolveContext context;
+    context.export_id = export_config.id;
+    context.export_session_id = export_state.current_session_id;
+    context.row_index = std::uint64_t{0};
+    context.trigger_mode = std::string(trigger_mode);
+    context.session_started_at = now;
+    context.export_captured_at = now;
+    context.system_now = now;
+
+    // The template is already structurally validated at bootstrap. At runtime
+    // missing values interpolate to empty and should not abort session opening.
+    const auto target_path = core::TextResolver::resolveTargetTemplate(
+        export_config.compiled_target_template, m_hub, context);
+    export_state.current_target_path =
+        target_path.has_value() ? std::optional<std::string>{std::move(*target_path)}
+                                : std::optional<std::string>{std::string{}};
+    export_state.session_open = true;
+  }
+
+  static void closeFileExportSessionLocked(
+      FileExportRuntimeState& export_state) noexcept {
+    export_state.session_open = false;
+    export_state.current_session_id.reset();
+    export_state.current_target_path.reset();
+    export_state.session_started_at.reset();
+  }
+
+  void resetFileExportStatesOnStop() noexcept {
+    for (auto& export_state : m_file_export_states) {
+      export_state.last_activation_result = false;
+      export_state.session_open = false;
+      export_state.current_session_id.reset();
+      export_state.current_target_path.reset();
+      export_state.session_started_at.reset();
+      export_state.accepted_attempt_count = 0;
+    }
   }
 
   bool runtimeNeedsScheduler() const noexcept {
@@ -615,6 +803,7 @@ class DataHubRuntime final : public IDataHubRuntime, public IRuntimeHubAccess {
   std::vector<ProducerToken> m_producer_tokens;
   std::shared_ptr<InternalProducerOpenState> m_internal_producer_open_state;
   OnChangeDispatcher m_on_change_dispatcher;
+  std::vector<FileExportRuntimeState> m_file_export_states;
   bool m_started{false};
   bool m_ever_started{false};
   std::uint64_t m_start_generation{0};

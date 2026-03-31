@@ -5,6 +5,7 @@
 #include <cstddef>
 #include <cstdint>
 #include <memory>
+#include <optional>
 #include <string>
 #include <string_view>
 #include <utility>
@@ -17,6 +18,7 @@ using gt::datahub::OpenProducerErrorCode;
 using gt::datahub::Quality;
 using gt::datahub::RuntimeErrorCode;
 using gt::datahub::SubmitErrorCode;
+using gt::datahub::TriggerErrorCode;
 using gt::datahub::UpdateRequest;
 using gt::datahub::runtime::DataHubRuntime;
 using gt::datahub::runtime::OnChangeNotification;
@@ -87,6 +89,79 @@ datahub:
         ns: 2
         item_id: "N1-ACI.CONV1.ALARME_ESCORIA"
   file_exports: []
+)yaml";
+
+constexpr std::string_view kPeriodicActivationYaml = R"yaml(
+datahub:
+  schema_version: 1
+  connectors:
+    - id: file_main
+      kind: file
+  variables:
+    - name: CORRIDA_ATIVA
+      data_type: Bool
+      role: State
+      default_value: false
+  producer_bindings:
+    - id: pb_corrida_ativa_interna
+      variable_name: CORRIDA_ATIVA
+      producer_kind: internal
+  consumer_bindings: []
+  file_exports:
+    - id: exp_corrida
+      connector_id: file_main
+      format: csv
+      target_template: "corridas/${system.now}.csv"
+      append: true
+      write_header_if_missing: true
+      trigger:
+        mode: periodic
+        period_ms: 1000
+      activation:
+        run_while:
+          source: hub.CORRIDA_ATIVA.value
+          op: eq
+          value: true
+        finalize_on_stop: true
+      columns:
+        - name: ativa
+          source: hub.CORRIDA_ATIVA.value
+)yaml";
+
+constexpr std::string_view kManualActivationYaml = R"yaml(
+datahub:
+  schema_version: 1
+  connectors:
+    - id: file_main
+      kind: file
+  variables:
+    - name: SNAPSHOT_HABILITADO
+      data_type: Bool
+      role: State
+      default_value: false
+  producer_bindings:
+    - id: pb_snapshot_habilitado
+      variable_name: SNAPSHOT_HABILITADO
+      producer_kind: internal
+  consumer_bindings: []
+  file_exports:
+    - id: exp_snapshot
+      connector_id: file_main
+      format: csv
+      target_template: "snapshots/${system.now}.csv"
+      append: false
+      write_header_if_missing: true
+      trigger:
+        mode: manual
+      activation:
+        run_while:
+          source: hub.SNAPSHOT_HABILITADO.value
+          op: eq
+          value: true
+        finalize_on_stop: true
+      columns:
+        - name: enabled
+          source: hub.SNAPSHOT_HABILITADO.value
 )yaml";
 
 struct FakeSinkProbe {
@@ -342,6 +417,86 @@ TEST(DataHubRuntimeTest, InternalUpdateTriggersFakeSinkAfterDispatchDrain) {
   EXPECT_EQ(fake_sink.received_count, std::size_t{1});
   ASSERT_EQ(fake_sink.versions.size(), std::size_t{1});
   EXPECT_EQ(fake_sink.versions.front(), std::uint64_t{1});
+}
+
+TEST(DataHubRuntimeTest, ManualTriggerRejectsInactiveActivationAndFinalizesSession) {
+  auto runtime = makeRuntime(kManualActivationYaml);
+  ASSERT_NE(runtime, nullptr);
+  ASSERT_TRUE(runtime->start().has_value());
+
+  const auto inactive_trigger = runtime->triggerFileExport("exp_snapshot");
+  ASSERT_FALSE(inactive_trigger.has_value());
+  EXPECT_EQ(inactive_trigger.error().code, TriggerErrorCode::ActivationInactive);
+
+  auto producer_result = runtime->openInternalProducer("pb_snapshot_habilitado");
+  ASSERT_TRUE(producer_result.has_value());
+  ASSERT_NE(*producer_result, nullptr);
+
+  UpdateRequest enable_request;
+  enable_request.value = true;
+  ASSERT_TRUE((*producer_result)->submit(std::move(enable_request)).has_value());
+
+  ASSERT_TRUE(runtime->triggerFileExport("exp_snapshot").has_value());
+  EXPECT_TRUE(runtime->fileExportSessionOpen("exp_snapshot"));
+  EXPECT_EQ(runtime->currentFileExportSessionId("exp_snapshot"),
+            std::optional<std::uint64_t>{1});
+
+  UpdateRequest disable_request;
+  disable_request.value = false;
+  ASSERT_TRUE((*producer_result)->submit(std::move(disable_request)).has_value());
+
+  const auto inactive_after_stop = runtime->triggerFileExport("exp_snapshot");
+  ASSERT_FALSE(inactive_after_stop.has_value());
+  EXPECT_EQ(inactive_after_stop.error().code,
+            TriggerErrorCode::ActivationInactive);
+  EXPECT_FALSE(runtime->fileExportSessionOpen("exp_snapshot"));
+}
+
+TEST(DataHubRuntimeTest, PeriodicExportRespectsActivationWindowAndFinalizeOnStop) {
+  auto runtime = makeRuntime(kPeriodicActivationYaml);
+  ASSERT_NE(runtime, nullptr);
+  ASSERT_TRUE(runtime->start().has_value());
+
+  runtime->runPeriodicExportTickForTesting();
+  EXPECT_EQ(runtime->acceptedFileExportAttemptCount("exp_corrida"),
+            std::size_t{0});
+  EXPECT_FALSE(runtime->fileExportSessionOpen("exp_corrida"));
+
+  auto producer_result = runtime->openInternalProducer("pb_corrida_ativa_interna");
+  ASSERT_TRUE(producer_result.has_value());
+  ASSERT_NE(*producer_result, nullptr);
+
+  UpdateRequest start_request;
+  start_request.value = true;
+  ASSERT_TRUE((*producer_result)->submit(std::move(start_request)).has_value());
+
+  runtime->runPeriodicExportTickForTesting();
+  EXPECT_EQ(runtime->acceptedFileExportAttemptCount("exp_corrida"),
+            std::size_t{1});
+  EXPECT_TRUE(runtime->fileExportSessionOpen("exp_corrida"));
+  EXPECT_EQ(runtime->currentFileExportSessionId("exp_corrida"),
+            std::optional<std::uint64_t>{1});
+
+  UpdateRequest stop_request;
+  stop_request.value = false;
+  ASSERT_TRUE((*producer_result)->submit(std::move(stop_request)).has_value());
+
+  runtime->runPeriodicExportTickForTesting();
+  EXPECT_EQ(runtime->acceptedFileExportAttemptCount("exp_corrida"),
+            std::size_t{1});
+  EXPECT_FALSE(runtime->fileExportSessionOpen("exp_corrida"));
+  EXPECT_EQ(runtime->currentFileExportSessionId("exp_corrida"), std::nullopt);
+
+  UpdateRequest restart_request;
+  restart_request.value = true;
+  ASSERT_TRUE((*producer_result)->submit(std::move(restart_request)).has_value());
+
+  runtime->runPeriodicExportTickForTesting();
+  EXPECT_EQ(runtime->acceptedFileExportAttemptCount("exp_corrida"),
+            std::size_t{2});
+  EXPECT_TRUE(runtime->fileExportSessionOpen("exp_corrida"));
+  EXPECT_EQ(runtime->currentFileExportSessionId("exp_corrida"),
+            std::optional<std::uint64_t>{2});
 }
 
 }  // namespace
