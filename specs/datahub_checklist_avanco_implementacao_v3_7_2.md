@@ -19,7 +19,7 @@ Este checklist foi derivado do roadmap `datahub_roadmap_v3_7_2.md` e serve como 
 - [x] Fase 2 — Catálogo, store e bootstrap de estado
 - [x] Fase 3 — YAML compiler e validação
 - [x] Fase 4 — Runtime, ownership e lifecycle
-- [ ] Fase 5 — Seletores, `resolveText()` e predicados
+- [~] Fase 5 — Seletores, `resolveText()` e predicados
 - [ ] Fase 6 — File source e file export
 - [ ] Fase 7 — Adapters OPC UA / OPC DA
 - [ ] Fase 8 — Testes automatizados, CI e hardening
@@ -287,17 +287,17 @@ Este checklist foi derivado do roadmap `datahub_roadmap_v3_7_2.md` e serve como 
 
 ### Sprint 5.1 — Resolução textual pública
 #### Implementação
-- [ ] Implementar `resolveText()` público
-- [ ] Fechar namespaces públicos permitidos
-- [ ] Implementar serialização textual canônica dos campos selecionáveis
+- [x] Implementar `resolveText()` público
+- [x] Fechar namespaces públicos permitidos
+- [x] Implementar serialização textual canônica dos campos selecionáveis
 
 #### Testes
-- [ ] UT: `hub.<var>.value`
-- [ ] UT: `hub.<var>.quality`
-- [ ] UT: `hub.<var>.initialized` serializa como `true/false`
-- [ ] UT: `hub.<var>.version` serializa como decimal
-- [ ] UT: `context.row_index` serializa como inteiro decimal sem sinal
-- [ ] ST: template textual completo resolve corretamente
+- [x] UT: `hub.<var>.value`
+- [x] UT: `hub.<var>.quality`
+- [x] UT: `hub.<var>.initialized` serializa como `true/false`
+- [x] UT: `hub.<var>.version` serializa como decimal
+- [x] UT: `context.row_index` serializa como inteiro decimal sem sinal
+- [x] ST: template textual completo resolve corretamente
 
 ### Sprint 5.2 — Semântica de erro e valor ausente
 #### Implementação

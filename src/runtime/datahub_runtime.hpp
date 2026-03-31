@@ -2,6 +2,7 @@
 
 #include "core/compiled_catalog.hpp"
 #include "core/state_store.hpp"
+#include "core/text_resolver.hpp"
 #include "gt_datahub/i_datahub_runtime.hpp"
 #include "runtime/i_runtime_hub_access.hpp"
 #include "runtime/on_change_dispatcher.hpp"
@@ -341,10 +342,11 @@ class DataHubRuntime final : public IDataHubRuntime, public IRuntimeHubAccess {
     }
 
     std::expected<std::string, ResolveError> resolveText(
-        std::string_view) const override {
-      return std::unexpected(ResolveError{
-          ResolveErrorCode::InvalidContext,
-          "resolveText is introduced in phase 5 after the runtime core"});
+        std::string_view expression) const override {
+      core::TextResolveContext context;
+      return core::TextResolver::resolveExpression(
+          expression, *this, core::SelectorContext::PublicResolve,
+          std::move(context));
     }
 
    private:

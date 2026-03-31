@@ -24,6 +24,7 @@ set(GTDATAHUB_SRC_FILES
     src/core/state_store.hpp
     src/core/selector_parser.hpp
     src/core/text_template_compiler.hpp
+    src/core/text_resolver.hpp
     src/core/predicate_compiler.hpp
     src/runtime/i_runtime_hub_access.hpp
     src/runtime/on_change_dispatcher.hpp
