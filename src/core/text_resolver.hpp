@@ -38,6 +38,15 @@ struct TextResolveContext {
 };
 
 /**
+ * Internal selector/template resolution result before missing-value policy is
+ * applied by the caller.
+ */
+struct ResolvedText {
+  std::string text;
+  bool has_missing_value{false};
+};
+
+/**
  * Runtime resolver for canonical selectors and `${...}` text templates.
  *
  * Parsing remains separate from runtime evaluation: YAML fields are compiled at
@@ -54,6 +63,92 @@ class TextResolver {
       std::string_view expression, const IDataHub& hub,
       SelectorContext selector_context,
       TextResolveContext context = {}) {
+    const auto resolved = resolveExpressionDetailed(expression, hub,
+                                                    selector_context,
+                                                    std::move(context));
+    if (!resolved.has_value()) {
+      return std::unexpected(resolved.error());
+    }
+
+    return std::move(resolved->text);
+  }
+
+  /**
+   * Resolves one already-compiled `target_template`.
+   *
+   * Missing values are interpolated as empty strings, while structural errors
+   * still fail the whole resolution attempt.
+   */
+  static std::expected<std::string, ResolveError> resolveTargetTemplate(
+      const CompiledTextTemplate& template_text, const IDataHub& hub,
+      TextResolveContext context = {}) {
+    const auto resolved =
+        resolveTemplateDetailed(template_text, hub, std::move(context));
+    if (!resolved.has_value()) {
+      return std::unexpected(resolved.error());
+    }
+
+    return std::move(resolved->text);
+  }
+
+  /**
+   * Resolves one already-compiled `path_template`.
+   *
+   * This path is intentionally stricter than `target_template`: when any
+   * interpolation depends on an absent or uninitialized value, the caller gets
+   * `std::nullopt` and can skip the acquisition attempt without producing a
+   * degenerate source path.
+   */
+  static std::expected<std::optional<std::string>, ResolveError>
+  resolvePathTemplate(const CompiledTextTemplate& template_text,
+                      const IDataHub& hub,
+                      TextResolveContext context = {}) {
+    const auto resolved =
+        resolveTemplateDetailed(template_text, hub, std::move(context));
+    if (!resolved.has_value()) {
+      return std::unexpected(resolved.error());
+    }
+
+    if (resolved->has_missing_value) {
+      return std::optional<std::string>{};
+    }
+
+    return std::optional<std::string>{std::move(resolved->text)};
+  }
+
+  /**
+   * Resolves one already-compiled canonical selector.
+   */
+  static std::expected<std::string, ResolveError> resolveSelector(
+      const CompiledSelector& selector, const IDataHub& hub,
+      const TextResolveContext& context) {
+    const auto resolved = resolveSelectorDetailed(selector, hub, context);
+    if (!resolved.has_value()) {
+      return std::unexpected(resolved.error());
+    }
+
+    return std::move(resolved->text);
+  }
+
+  /**
+   * Resolves one already-compiled template.
+   */
+  static std::expected<std::string, ResolveError> resolveTemplate(
+      const CompiledTextTemplate& template_text, const IDataHub& hub,
+      const TextResolveContext& context) {
+    const auto resolved =
+        resolveTemplateDetailed(template_text, hub, context);
+    if (!resolved.has_value()) {
+      return std::unexpected(resolved.error());
+    }
+
+    return std::move(resolved->text);
+  }
+
+ private:
+  static std::expected<ResolvedText, ResolveError> resolveExpressionDetailed(
+      std::string_view expression, const IDataHub& hub,
+      SelectorContext selector_context, TextResolveContext context) {
     seedResolutionNow(context);
 
     if (expression.find("${") == std::string_view::npos) {
@@ -64,10 +159,10 @@ class TextResolver {
           return std::unexpected(mapSelectorParseError(selector.error().message));
         }
 
-        return resolveSelector(*selector, hub, context);
+        return resolveSelectorDetailed(*selector, hub, context);
       }
 
-      return std::string(expression);
+      return ResolvedText{std::string(expression), false};
     }
 
     const auto compiled =
@@ -76,13 +171,10 @@ class TextResolver {
       return std::unexpected(mapSelectorParseError(compiled.error().message));
     }
 
-    return resolveTemplate(*compiled, hub, context);
+    return resolveTemplateDetailed(*compiled, hub, std::move(context));
   }
 
-  /**
-   * Resolves one already-compiled canonical selector.
-   */
-  static std::expected<std::string, ResolveError> resolveSelector(
+  static std::expected<ResolvedText, ResolveError> resolveSelectorDetailed(
       const CompiledSelector& selector, const IDataHub& hub,
       const TextResolveContext& context) {
     if (const auto* hub_selector = std::get_if<HubSelector>(&selector.value)) {
@@ -108,13 +200,13 @@ class TextResolver {
         ResolveErrorCode::InvalidSyntax, "unsupported selector variant"});
   }
 
-  /**
-   * Resolves one already-compiled template.
-   */
-  static std::expected<std::string, ResolveError> resolveTemplate(
+  static std::expected<ResolvedText, ResolveError> resolveTemplateDetailed(
       const CompiledTextTemplate& template_text, const IDataHub& hub,
-      const TextResolveContext& context) {
+      TextResolveContext context) {
+    seedResolutionNow(context);
+
     std::string resolved;
+    bool has_missing_value = false;
 
     for (const auto& segment : template_text.segments) {
       if (const auto* text = std::get_if<TextSegment>(&segment)) {
@@ -130,19 +222,19 @@ class TextResolver {
       }
 
       auto selector_text =
-          resolveSelector(selector_segment->selector, hub, context);
+          resolveSelectorDetailed(selector_segment->selector, hub, context);
       if (!selector_text.has_value()) {
         return std::unexpected(selector_text.error());
       }
 
-      resolved += *selector_text;
+      resolved += selector_text->text;
+      has_missing_value = has_missing_value || selector_text->has_missing_value;
     }
 
-    return resolved;
+    return ResolvedText{std::move(resolved), has_missing_value};
   }
 
- private:
-  static std::expected<std::string, ResolveError> resolveHubSelector(
+  static std::expected<ResolvedText, ResolveError> resolveHubSelector(
       const HubSelector& selector, const IDataHub& hub) {
     const auto state = hub.getState(selector.variable_name);
     if (!state.has_value()) {
@@ -153,84 +245,100 @@ class TextResolver {
 
     switch (selector.field) {
       case HubField::Value:
-        if (!state->initialized) {
-          return std::string{};
+        if (!state->initialized || std::holds_alternative<std::monostate>(state->value)) {
+          return ResolvedText{"", true};
         }
-        return serializeValue(state->value);
+        return ResolvedText{serializeValue(state->value), false};
       case HubField::Quality:
-        return serializeQuality(state->quality);
+        return ResolvedText{serializeQuality(state->quality), false};
       case HubField::SourceTimestamp:
         if (!state->source_timestamp.has_value()) {
-          return std::string{};
+          return ResolvedText{"", true};
         }
-        return serializeIso8601Utc(*state->source_timestamp);
+        return ResolvedText{serializeIso8601Utc(*state->source_timestamp), false};
       case HubField::HubTimestamp:
         if (!state->hub_timestamp.has_value()) {
-          return std::string{};
+          return ResolvedText{"", true};
         }
-        return serializeIso8601Utc(*state->hub_timestamp);
+        return ResolvedText{serializeIso8601Utc(*state->hub_timestamp), false};
       case HubField::Version:
-        return std::to_string(state->version);
+        return ResolvedText{std::to_string(state->version), false};
       case HubField::Initialized:
-        return state->initialized ? std::string("true") : std::string("false");
+        return ResolvedText{
+            state->initialized ? std::string("true") : std::string("false"),
+            false};
     }
 
     return std::unexpected(ResolveError{
         ResolveErrorCode::UnknownField, "unsupported hub field"});
   }
 
-  static std::expected<std::string, ResolveError> resolveContextSelector(
+  static std::expected<ResolvedText, ResolveError> resolveContextSelector(
       const ContextSelector& selector, const TextResolveContext& context) {
     switch (selector.field) {
       case ContextField::ExportId:
-        return context.export_id.value_or(std::string{});
+        if (!context.export_id.has_value()) {
+          return ResolvedText{"", true};
+        }
+        return ResolvedText{*context.export_id, false};
       case ContextField::ExportSessionId:
         if (!context.export_session_id.has_value()) {
-          return std::string{};
+          return ResolvedText{"", true};
         }
-        return std::to_string(*context.export_session_id);
+        return ResolvedText{std::to_string(*context.export_session_id), false};
       case ContextField::RowIndex:
         if (!context.row_index.has_value()) {
-          return std::string{};
+          return ResolvedText{"", true};
         }
-        return std::to_string(*context.row_index);
+        return ResolvedText{std::to_string(*context.row_index), false};
       case ContextField::TriggerMode:
-        return context.trigger_mode.value_or(std::string{});
+        if (!context.trigger_mode.has_value()) {
+          return ResolvedText{"", true};
+        }
+        return ResolvedText{*context.trigger_mode, false};
       case ContextField::TargetPath:
-        return context.target_path.value_or(std::string{});
+        if (!context.target_path.has_value()) {
+          return ResolvedText{"", true};
+        }
+        return ResolvedText{*context.target_path, false};
       case ContextField::SessionStartedAt:
         if (!context.session_started_at.has_value()) {
-          return std::string{};
+          return ResolvedText{"", true};
         }
-        return serializeIso8601Utc(*context.session_started_at);
+        return ResolvedText{serializeIso8601Utc(*context.session_started_at),
+                            false};
     }
 
     return std::unexpected(ResolveError{
         ResolveErrorCode::UnknownField, "unsupported context field"});
   }
 
-  static std::expected<std::string, ResolveError> resolveExportSelector(
+  static std::expected<ResolvedText, ResolveError> resolveExportSelector(
       const ExportSelector& selector, const TextResolveContext& context) {
     switch (selector.field) {
       case ExportField::CapturedAt:
         if (!context.export_captured_at.has_value()) {
-          return std::string{};
+          return ResolvedText{"", true};
         }
-        return serializeIso8601Utc(*context.export_captured_at);
+        return ResolvedText{serializeIso8601Utc(*context.export_captured_at),
+                            false};
     }
 
     return std::unexpected(ResolveError{
         ResolveErrorCode::UnknownField, "unsupported export field"});
   }
 
-  static std::expected<std::string, ResolveError> resolveSystemSelector(
+  static std::expected<ResolvedText, ResolveError> resolveSystemSelector(
       const SystemSelector& selector, const TextResolveContext& context) {
     switch (selector.field) {
       case SystemField::Now:
         if (!context.system_now.has_value()) {
-          return serializeSystemNowCompact(std::chrono::system_clock::now());
+          return ResolvedText{
+              serializeSystemNowCompact(std::chrono::system_clock::now()),
+              false};
         }
-        return serializeSystemNowCompact(*context.system_now);
+        return ResolvedText{
+            serializeSystemNowCompact(*context.system_now), false};
     }
 
     return std::unexpected(ResolveError{
@@ -353,8 +461,9 @@ class TextResolver {
   static ResolveError mapSelectorParseError(std::string message) {
     ResolveErrorCode code = ResolveErrorCode::InvalidSyntax;
 
-    if (message.find("namespace") != std::string::npos ||
-        message.find("not allowed in this context") != std::string::npos) {
+    if (message.find("not allowed in this context") != std::string::npos) {
+      code = ResolveErrorCode::InvalidContext;
+    } else if (message.find("namespace") != std::string::npos) {
       code = ResolveErrorCode::InvalidNamespace;
     } else if (message.find("field") != std::string::npos) {
       code = ResolveErrorCode::UnknownField;

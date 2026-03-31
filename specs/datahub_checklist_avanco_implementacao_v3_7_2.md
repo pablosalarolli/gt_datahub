@@ -301,15 +301,15 @@ Este checklist foi derivado do roadmap `datahub_roadmap_v3_7_2.md` e serve como 
 
 ### Sprint 5.2 — Semântica de erro e valor ausente
 #### Implementação
-- [ ] Retornar erro estrutural em `resolveText()`
-- [ ] Interpolar string vazia para valor ausente
-- [ ] Diferenciar `path_template` e `target_template`
+- [x] Retornar erro estrutural em `resolveText()`
+- [x] Interpolar string vazia para valor ausente
+- [x] Diferenciar `path_template` e `target_template`
 
 #### Testes
-- [ ] UT: namespace inválido retorna erro
-- [ ] UT: variável desconhecida retorna erro
-- [ ] UT: valor ausente interpola vazio
-- [ ] ST: `path_template` ausente ignora tentativa sem tocar estado
+- [x] UT: namespace inválido retorna erro
+- [x] UT: variável desconhecida retorna erro
+- [x] UT: valor ausente interpola vazio
+- [x] ST: `path_template` ausente ignora tentativa sem tocar estado
 
 ### Sprint 5.3 — Avaliação de predicados
 #### Implementação

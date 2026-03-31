@@ -67,7 +67,27 @@ TEST(ResolveTextRuntimeTest, PublicResolveRejectsContextNamespace) {
   const auto resolved = runtime->hub().resolveText("context.row_index");
 
   ASSERT_FALSE(resolved.has_value());
+  EXPECT_EQ(resolved.error().code, ResolveErrorCode::InvalidContext);
+}
+
+TEST(ResolveTextRuntimeTest, PublicResolveRejectsUnsupportedNamespace) {
+  auto runtime = makeRuntime(kResolveTextYaml);
+  ASSERT_NE(runtime, nullptr);
+
+  const auto resolved = runtime->hub().resolveText("foo.bar");
+
+  ASSERT_FALSE(resolved.has_value());
   EXPECT_EQ(resolved.error().code, ResolveErrorCode::InvalidNamespace);
+}
+
+TEST(ResolveTextRuntimeTest, PublicResolveRejectsUnknownVariable) {
+  auto runtime = makeRuntime(kResolveTextYaml);
+  ASSERT_NE(runtime, nullptr);
+
+  const auto resolved = runtime->hub().resolveText("hub.MISSING.value");
+
+  ASSERT_FALSE(resolved.has_value());
+  EXPECT_EQ(resolved.error().code, ResolveErrorCode::UnknownVariable);
 }
 
 TEST(ResolveTextRuntimeTest, PublicResolveReturnsEmptyStringForUninitializedValue) {
